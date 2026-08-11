@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "1026546614926",
+    "firebase_url": "https://poltroplay-default-rtdb.firebaseio.com",
+    "project_id": "poltroplay",
+    "storage_bucket": "poltroplay.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1026546614926:android:1c89f248f2c8c28f22ffdf",
+        "android_client_info": {
+          "package_name": "com.poltroplay"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1026546614926-04ude2c6190fb1o82u8lgaht7kadde3c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCoFNWDXmC1R_AjP9cJutPs-DKpNlgq1fc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1026546614926-04ude2c6190fb1o82u8lgaht7kadde3c.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

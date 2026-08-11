@@ -1,0 +1,82 @@
+name: poltro_play
+description: "PoltroPlay - Streaming de Filmes e Séries"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Firebase
+  firebase_core: ^4.12.1
+  firebase_auth: ^6.5.6
+  firebase_messaging: ^16.4.3
+  cloud_firestore: ^6.7.1
+
+  # Auth
+  google_sign_in: ^6.2.1
+
+  # Ads
+  google_mobile_ads: ^9.0.0
+
+  # State Management
+  flutter_riverpod: ^2.6.1
+
+  # Navigation
+  go_router: ^17.3.0
+
+  # Video
+  video_player: ^2.10.0
+  chewie: ^1.10.0
+  youtube_player_flutter: ^10.0.1
+
+  # Local Storage
+  hive_ce: ^2.10.1
+  hive_ce_flutter: ^2.2.0
+
+  # HTTP & Files
+  dio: ^5.8.0+1
+  path_provider: ^2.1.2
+
+  # UI
+  cached_network_image: ^3.4.1
+  shimmer: ^3.0.0
+  carousel_slider: ^5.0.0
+  google_fonts: ^8.2.1
+  url_launcher: ^6.3.0
+
+  # Notifications
+  flutter_local_notifications: ^22.2.0
+
+  # Utils
+  intl: ^0.20.2
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.4
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/icon-fundo.jpeg"
+  min_sdk_size: 21
+  adaptive_icon_background: "#0A0A0A"
+  adaptive_icon_foreground: "assets/images/icon-fundo.jpeg"
+
+flutter_native_splash:
+  color: "#0A0A0A"
+  image: "assets/images/logo-01-sem-fundo.png"
+  android: true
+  ios: true
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
