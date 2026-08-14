@@ -1,7 +1,7 @@
 name: poltro_play
 description: "PoltroPlay - Streaming de Filmes e Séries"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+4
 
 environment:
   sdk: ^3.12.2
