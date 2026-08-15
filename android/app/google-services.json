@@ -15,6 +15,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "1026546614926-1tdliiggptce8ubmca48f8df9ad4ertc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.poltroplay",
+            "certificate_hash": "d90b8aa8dbe8c97815fceddb31c49d63169eca34"
+          }
+        },
+        {
           "client_id": "1026546614926-cu0khr4pthlhuubklm42jqtg2g7j8gri.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
