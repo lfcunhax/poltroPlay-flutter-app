@@ -65,6 +65,41 @@ class Series {
     );
   }
 
+  /// Constrói Series a partir da resposta da API REST PostgreSQL (campos em snake_case)
+  factory Series.fromApi(Map<String, dynamic> json) {
+    return Series(
+      id: json['id']?.toString() ?? '',
+      tmdbId: (json['tmdb_id'] ?? json['tmdbId'] ?? 0) is int
+          ? (json['tmdb_id'] ?? json['tmdbId'] ?? 0)
+          : int.tryParse((json['tmdb_id'] ?? json['tmdbId'] ?? '0').toString()) ?? 0,
+      name: json['title'] ?? json['name'] ?? '',
+      overview: json['overview'] ?? '',
+      posterPath: json['poster_path'] ?? json['posterPath'],
+      backdropPath: json['backdrop_path'] ?? json['backdropPath'],
+      voteAverage: json['vote_average'] != null 
+          ? (double.tryParse(json['vote_average'].toString()) ?? 0.0) 
+          : (json['voteAverage'] != null ? (double.tryParse(json['voteAverage'].toString()) ?? 0.0) : 0.0),
+      firstAirDate: json['release_date'] ?? json['first_air_date'] ?? json['firstAirDate'],
+      numberOfSeasons: null,
+      numberOfEpisodes: null,
+      videoUrl: null,
+      tags: () {
+        final t = json['tags'];
+        if (t is List) {
+          return t.map((e) => e.toString()).toList();
+        } else if (t is String && t.trim().isNotEmpty) {
+          return t
+              .split(RegExp(r'[,;]|\s{2,}'))
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
+        }
+        return <String>[];
+      }(),
+    );
+  }
+
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -82,13 +117,17 @@ class Series {
     };
   }
 
-  String get fullPosterUrl => posterPath != null 
-      ? '${AppConstants.imageBaseUrlW500}$posterPath' 
-      : 'https://via.placeholder.com/500x750.png?text=No+Poster';
+  String get fullPosterUrl {
+    if (posterPath == null) return 'https://via.placeholder.com/500x750.png?text=No+Poster';
+    if (posterPath!.startsWith('http')) return posterPath!;
+    return '${AppConstants.imageBaseUrlW500}$posterPath';
+  }
 
-  String get fullBackdropUrl => backdropPath != null 
-      ? '${AppConstants.imageBaseUrlW1280}$backdropPath' 
-      : 'https://via.placeholder.com/1280x720.png?text=No+Backdrop';
+  String get fullBackdropUrl {
+    if (backdropPath == null) return 'https://via.placeholder.com/1280x720.png?text=No+Backdrop';
+    if (backdropPath!.startsWith('http')) return backdropPath!;
+    return '${AppConstants.imageBaseUrlW1280}$backdropPath';
+  }
 
   String get year {
     if (firstAirDate == null || firstAirDate!.isEmpty) return '';

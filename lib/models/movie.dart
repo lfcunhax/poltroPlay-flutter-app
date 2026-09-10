@@ -73,13 +73,17 @@ class Movie {
     };
   }
 
-  String get fullPosterUrl => posterPath != null 
-      ? '${AppConstants.imageBaseUrlW500}$posterPath' 
-      : 'https://via.placeholder.com/500x750.png?text=No+Poster';
+  String get fullPosterUrl {
+    if (posterPath == null) return 'https://via.placeholder.com/500x750.png?text=No+Poster';
+    if (posterPath!.startsWith('http')) return posterPath!;
+    return '${AppConstants.imageBaseUrlW500}$posterPath';
+  }
 
-  String get fullBackdropUrl => backdropPath != null 
-      ? '${AppConstants.imageBaseUrlW1280}$backdropPath' 
-      : 'https://via.placeholder.com/1280x720.png?text=No+Backdrop';
+  String get fullBackdropUrl {
+    if (backdropPath == null) return 'https://via.placeholder.com/1280x720.png?text=No+Backdrop';
+    if (backdropPath!.startsWith('http')) return backdropPath!;
+    return '${AppConstants.imageBaseUrlW1280}$backdropPath';
+  }
 
   String get year {
     if (releaseDate == null || releaseDate!.isEmpty) return '';

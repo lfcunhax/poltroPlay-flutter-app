@@ -1,21 +1,41 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:hive_ce/hive.dart';
 import 'package:poltro_play/models/movie.dart';
 import 'package:poltro_play/models/series.dart';
 import 'package:poltro_play/models/promotion.dart';
+import 'package:poltro_play/core/utils/string_utils.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  static const int _pageSize = 20;
 
-  // --- MOVIES ---
+  // --- MOVIES (com paginação) ---
 
+  Future<List<Movie>> getMovies({DocumentSnapshot? lastDoc}) async {
+    try {
+      Query query = _db.collection('movies')
+          .orderBy('createdAt', descending: true)
+          .limit(_pageSize);
+
+      if (lastDoc != null) {
+        query = query.startAfterDocument(lastDoc);
+      }
+
+      final snapshot = await query.get();
+      return snapshot.docs.map((doc) => Movie.fromFirestore(doc as DocumentSnapshot<Map<String, dynamic>>)).toList();
+    } catch (e) {
+      print("Error fetching movies: $e");
+      return [];
+    }
+  }
+
+  // Mantém métodos antigos para compatibilidade com home_screen
   Future<List<Movie>> getTrendingMovies() async {
     try {
-      // Assuming 'xtream' or 'recent' tag means trending, or sort by createdAt
       final snapshot = await _db.collection('movies')
           .orderBy('createdAt', descending: true)
           .limit(20)
           .get();
-          
       return snapshot.docs.map((doc) => Movie.fromFirestore(doc)).toList();
     } catch (e) {
       print("Error fetching trending movies: $e");
@@ -29,7 +49,6 @@ class FirestoreService {
           .orderBy('voteAverage', descending: true)
           .limit(20)
           .get();
-          
       return snapshot.docs.map((doc) => Movie.fromFirestore(doc)).toList();
     } catch (e) {
       print("Error fetching popular movies: $e");
@@ -37,13 +56,8 @@ class FirestoreService {
     }
   }
   
-  Future<List<Movie>> getTopRatedMovies() async {
-    return getPopularMovies(); // Same for now
-  }
-  
-  Future<List<Movie>> getNowPlayingMovies() async {
-    return getTrendingMovies(); // Same for now
-  }
+  Future<List<Movie>> getTopRatedMovies() async => getPopularMovies();
+  Future<List<Movie>> getNowPlayingMovies() async => getTrendingMovies();
 
   Future<Movie> getMovieDetail(String id) async {
     try {
@@ -58,7 +72,25 @@ class FirestoreService {
     }
   }
 
-  // --- SERIES ---
+  // --- SERIES (com paginação) ---
+
+  Future<List<Series>> getSeries({DocumentSnapshot? lastDoc}) async {
+    try {
+      Query query = _db.collection('series')
+          .orderBy('createdAt', descending: true)
+          .limit(_pageSize);
+
+      if (lastDoc != null) {
+        query = query.startAfterDocument(lastDoc);
+      }
+
+      final snapshot = await query.get();
+      return snapshot.docs.map((doc) => Series.fromFirestore(doc as DocumentSnapshot<Map<String, dynamic>>)).toList();
+    } catch (e) {
+      print("Error fetching series: $e");
+      return [];
+    }
+  }
 
   Future<List<Series>> getTrendingSeries() async {
     try {
@@ -66,7 +98,6 @@ class FirestoreService {
           .orderBy('createdAt', descending: true)
           .limit(20)
           .get();
-          
       return snapshot.docs.map((doc) => Series.fromFirestore(doc)).toList();
     } catch (e) {
       print("Error fetching trending series: $e");
@@ -80,7 +111,6 @@ class FirestoreService {
           .orderBy('voteAverage', descending: true)
           .limit(20)
           .get();
-          
       return snapshot.docs.map((doc) => Series.fromFirestore(doc)).toList();
     } catch (e) {
       print("Error fetching popular series: $e");
@@ -88,9 +118,7 @@ class FirestoreService {
     }
   }
 
-  Future<List<Series>> getTopRatedSeries() async {
-    return getPopularSeries();
-  }
+  Future<List<Series>> getTopRatedSeries() async => getPopularSeries();
 
   Future<Series> getSeriesDetail(String id) async {
     try {
@@ -105,32 +133,168 @@ class FirestoreService {
     }
   }
 
-  // --- SEARCH ---
+  // --- SEARCH (otimizado com Firestore Range Queries + Cache Local) ---
 
-  Future<List<dynamic>> searchContent(String query) async {
-    if (query.isEmpty) return [];
-    
-    // Very basic search simulation (Firestore doesn't support full-text search easily)
-    // In a real app, Algolia or a cloud function is better.
-    // We'll fetch all and filter locally for MVP
+  List<Movie>? _movieCatalogCache;
+  bool _isSyncingCatalog = false;
+
+  /// Retorna catálogo de filmes do cache em memória/Hive ou sincroniza do Firestore
+  Future<List<Movie>> getCachedMovieCatalog() async {
+    if (_movieCatalogCache != null && _movieCatalogCache!.isNotEmpty) {
+      return _movieCatalogCache!;
+    }
+
     try {
-      final lowerQuery = query.toLowerCase();
-      
-      final moviesSnap = await _db.collection('movies').get();
-      final movies = moviesSnap.docs
-          .map((doc) => Movie.fromFirestore(doc))
-          .where((m) => m.title.toLowerCase().contains(lowerQuery))
-          .toList();
-          
-      final seriesSnap = await _db.collection('series').get();
-      final seriesList = seriesSnap.docs
-          .map((doc) => Series.fromFirestore(doc))
-          .where((s) => s.name.toLowerCase().contains(lowerQuery))
-          .toList();
-          
-      return [...movies, ...seriesList];
+      if (Hive.isBoxOpen('user_prefs_box')) {
+        final box = Hive.box('user_prefs_box');
+        final raw = box.get('movie_catalog_cache');
+        if (raw is List) {
+          final list = raw
+              .map((item) => Movie.fromJson(Map<String, dynamic>.from(item)))
+              .toList();
+          if (list.isNotEmpty) {
+            _movieCatalogCache = list;
+            _syncMovieCatalogInBackground();
+            return list;
+          }
+        }
+      }
+    } catch (_) {}
+
+    return await _syncMovieCatalog();
+  }
+
+  void _syncMovieCatalogInBackground() {
+    if (_isSyncingCatalog) return;
+    _syncMovieCatalog().catchError((_) => <Movie>[]);
+  }
+
+  Future<List<Movie>> _syncMovieCatalog() async {
+    if (_isSyncingCatalog) return _movieCatalogCache ?? [];
+    _isSyncingCatalog = true;
+
+    try {
+      final snapshot = await _db.collection('movies').get();
+      final movies = snapshot.docs.map((doc) => Movie.fromFirestore(doc)).toList();
+
+      if (movies.isNotEmpty) {
+        _movieCatalogCache = movies;
+        try {
+          if (Hive.isBoxOpen('user_prefs_box')) {
+            final box = Hive.box('user_prefs_box');
+            final serialized = movies.map((m) => m.toJson()).toList();
+            await box.put('movie_catalog_cache', serialized);
+          }
+        } catch (_) {}
+      }
+      return movies;
     } catch (e) {
-      print("Error searching content: $e");
+      print("Error syncing movie catalog: $e");
+      return _movieCatalogCache ?? [];
+    } finally {
+      _isSyncingCatalog = false;
+    }
+  }
+
+  Future<List<Movie>> searchContent(String query) async {
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) return [];
+
+    final normalizedQuery = normalizeSearchText(cleanQuery);
+    final queryWords = normalizedQuery.split(' ').where((w) => w.isNotEmpty).toList();
+
+    // 1. Busca range no Firestore por variações de prefixos no campo 'title'
+    final prefixes = generateSearchPrefixes(cleanQuery);
+    final firestoreFutures = prefixes.map((p) {
+      return _db.collection('movies')
+          .where('title', isGreaterThanOrEqualTo: p)
+          .where('title', isLessThanOrEqualTo: '$p\uf8ff')
+          .limit(20)
+          .get()
+          .then((snap) => snap.docs.map((doc) => Movie.fromFirestore(doc)).toList())
+          .catchError((_) => <Movie>[]);
+    });
+
+    // 2. Busca no catálogo em cache para termos no meio do título e buscas sem acento
+    final catalogFuture = getCachedMovieCatalog();
+
+    final firestoreResults = await Future.wait(firestoreFutures);
+    final catalog = await catalogFuture;
+
+    final resultMap = <String, Movie>{};
+
+    // Adiciona correspondências diretas do Firestore
+    for (final list in firestoreResults) {
+      for (final movie in list) {
+        resultMap[movie.id] = movie;
+      }
+    }
+
+    // Busca no catálogo completo com normalização de texto e acentos
+    for (final movie in catalog) {
+      final normalizedTitle = normalizeSearchText(movie.title);
+
+      // Correspondência direta da query normalizada
+      if (normalizedTitle.contains(normalizedQuery)) {
+        resultMap[movie.id] = movie;
+        continue;
+      }
+
+      // Se todas as palavras pesquisadas existem no título
+      if (queryWords.length > 1 && queryWords.every((w) => normalizedTitle.contains(w))) {
+        resultMap[movie.id] = movie;
+      }
+    }
+
+    final combined = resultMap.values.toList();
+
+    // 3. Ordenação por relevância:
+    // Exato > Começa com a query > Contém a query > Desempate por avaliação
+    combined.sort((a, b) {
+      final aNorm = normalizeSearchText(a.title);
+      final bNorm = normalizeSearchText(b.title);
+
+      final aExact = aNorm == normalizedQuery;
+      final bExact = bNorm == normalizedQuery;
+      if (aExact && !bExact) return -1;
+      if (!aExact && bExact) return 1;
+
+      final aStarts = aNorm.startsWith(normalizedQuery);
+      final bStarts = bNorm.startsWith(normalizedQuery);
+      if (aStarts && !bStarts) return -1;
+      if (!aStarts && bStarts) return 1;
+
+      final aContains = aNorm.contains(normalizedQuery);
+      final bContains = bNorm.contains(normalizedQuery);
+      if (aContains && !bContains) return -1;
+      if (!aContains && bContains) return 1;
+
+      return b.voteAverage.compareTo(a.voteAverage);
+    });
+
+    return combined;
+  }
+
+  // Sugestões para a tela de busca (filmes populares)
+  Future<List<dynamic>> getSuggestions() async {
+    try {
+      final moviesSnap = await _db.collection('movies')
+          .orderBy('voteAverage', descending: true)
+          .limit(10)
+          .get();
+      final movies = moviesSnap.docs.map((doc) => Movie.fromFirestore(doc)).toList();
+
+      final seriesSnap = await _db.collection('series')
+          .orderBy('voteAverage', descending: true)
+          .limit(10)
+          .get();
+      final series = seriesSnap.docs.map((doc) => Series.fromFirestore(doc)).toList();
+
+      final suggestions = [...movies, ...series];
+      suggestions.shuffle();
+      return suggestions;
+    } catch (e) {
+      print("Error fetching suggestions: $e");
       return [];
     }
   }
@@ -149,7 +313,6 @@ class FirestoreService {
 
       final highlights = [...movies, ...series, ...promos];
       
-      // Se não houver nenhum destaque e nenhuma promoção, retorna os mais recentes misturados
       if (highlights.isEmpty) {
         final recentMovies = await getTrendingMovies();
         final recentSeries = await getTrendingSeries();

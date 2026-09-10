@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart' as cache;
 
 class ContentCard extends StatelessWidget {
   final String imageUrl;
@@ -10,6 +11,15 @@ class ContentCard extends StatelessWidget {
   final double width;
   final double height;
   final String tag;
+
+  // Gerenciador de cache customizado com capacidade para muito mais capas de filmes
+  static final cache.CacheManager _movieImageCacheManager = cache.CacheManager(
+    cache.Config(
+      'moviePostersCache',
+      stalePeriod: const Duration(days: 30),
+      maxNrOfCacheObjects: 2000, // Aumentado de 200 (padrão) para 2000 imagens
+    ),
+  );
 
   const ContentCard({
     super.key,
@@ -49,6 +59,8 @@ class ContentCard extends StatelessWidget {
                 child: CachedNetworkImage(
                   imageUrl: imageUrl,
                   fit: BoxFit.cover,
+                  cacheManager: _movieImageCacheManager,
+                  memCacheWidth: (width * 2).toInt(), // Otimização crítica de performance
                   placeholder: (context, url) => Container(
                     color: const Color(0xFF1A1A2E),
                     child: const Center(

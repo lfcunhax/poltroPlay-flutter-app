@@ -42,8 +42,8 @@ class FavoritesNotifier extends StateNotifier<List<dynamic>> {
     }
   }
 
-  Future<void> removeFavorite(int id) async {
-    state = state.where((e) => e.id != id.toString()).toList();
+  Future<void> removeFavorite(String id) async {
+    state = state.where((e) => e.id.toString() != id).toList();
     if (_user != null) {
       await _firestore.removeFavorite(_user.uid, id.toString());
     }

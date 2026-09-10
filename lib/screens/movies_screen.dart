@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:poltro_play/providers/content_provider.dart';
 import 'package:poltro_play/widgets/content_card.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:poltro_play/models/movie.dart';
 
 class MoviesScreen extends ConsumerStatefulWidget {
   const MoviesScreen({super.key});
@@ -14,96 +13,127 @@ class MoviesScreen extends ConsumerStatefulWidget {
   ConsumerState<MoviesScreen> createState() => _MoviesScreenState();
 }
 
-class _MoviesScreenState extends ConsumerState<MoviesScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _MoviesScreenState extends ConsumerState<MoviesScreen> {
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 300) {
+      ref.read(paginatedMoviesProvider.notifier).loadMore();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final moviesState = ref.watch(paginatedMoviesProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0A0A0A),
-        title: Text('Filmes', style: GoogleFonts.outfit(color: Colors.white)),
+        elevation: 0,
+        title: Text('Filmes', style: GoogleFonts.outfit(
+          color: Colors.white,
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
+        )),
         actions: [
           IconButton(
             icon: const Icon(Icons.search, color: Colors.white),
             onPressed: () => context.push('/search'),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: const Color(0xFF7B2FF7),
-          labelColor: const Color(0xFF7B2FF7),
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(text: 'Populares'),
-            Tab(text: 'Mais Votados'),
-            Tab(text: 'Lançamentos'),
-          ],
-        ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildMovieGrid(popularMoviesProvider),
-          _buildMovieGrid(topRatedMoviesProvider),
-          _buildMovieGrid(nowPlayingMoviesProvider),
-        ],
+      body: RefreshIndicator(
+        color: const Color(0xFF00D4FF),
+        backgroundColor: const Color(0xFF1A1A2E),
+        onRefresh: () async {
+          await ref.read(paginatedMoviesProvider.notifier).refresh();
+        },
+        child: _buildBody(moviesState),
       ),
     );
   }
 
-  Widget _buildMovieGrid(FutureProvider<List<Movie>> provider) {
-    final moviesAsync = ref.watch(provider);
+  Widget _buildBody(PaginatedState moviesState) {
+    final movies = moviesState.items;
 
-    return RefreshIndicator(
-      color: const Color(0xFF00D4FF),
-      backgroundColor: const Color(0xFF1A1A2E),
-      onRefresh: () async {
-        ref.invalidate(provider);
-      },
-      child: moviesAsync.when(
-        data: (movies) {
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.7,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
+    // Estado inicial de carregamento
+    if (movies.isEmpty && moviesState.isLoading) {
+      return _buildShimmerGrid();
+    }
+
+    // Sem filmes
+    if (movies.isEmpty && !moviesState.isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.movie_outlined, size: 64, color: Colors.white24),
+            const SizedBox(height: 16),
+            Text(
+              'Nenhum filme encontrado',
+              style: GoogleFonts.inter(color: Colors.white54, fontSize: 16),
             ),
-            itemCount: movies.length,
-            itemBuilder: (context, index) {
-              final movie = movies[index];
-              return ContentCard(
-                imageUrl: movie.fullPosterUrl,
-                title: movie.title,
-                rating: movie.voteAverage,
-                tag: 'movies_screen_${movie.id}',
-                onTap: () {
-                  context.push('/detail/${movie.id}', extra: {'type': 'movie'});
-                },
-              );
-            },
-          );
-        },
-        loading: () => _buildShimmerGrid(),
-        error: (err, stack) => const Center(
-          child: Text('Erro ao carregar filmes', style: TextStyle(color: Colors.red)),
+          ],
         ),
+      );
+    }
+
+    // Grid com scroll infinito
+    return GridView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.65,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
       ),
+      // +1 para o indicador de carregamento no final
+      itemCount: movies.length + (moviesState.hasMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        // Indicador de carregamento no final da lista
+        if (index >= movies.length) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: const Color(0xFF7B2FF7),
+                ),
+              ),
+            ),
+          );
+        }
+
+        final movie = movies[index];
+        return ContentCard(
+          imageUrl: movie.fullPosterUrl,
+          title: movie.title,
+          rating: movie.voteAverage,
+          tag: 'movies_screen_${movie.id}',
+          onTap: () {
+            context.push('/detail/${movie.id}', extra: {'type': 'movie'});
+          },
+        );
+      },
     );
   }
 
@@ -112,9 +142,9 @@ class _MoviesScreenState extends ConsumerState<MoviesScreen> with SingleTickerPr
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.7,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
+        childAspectRatio: 0.65,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
       ),
       itemCount: 6,
       itemBuilder: (context, index) {

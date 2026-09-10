@@ -1,4 +1,6 @@
 import 'package:hive_ce/hive.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:poltro_play/models/watch_progress.dart';
 
 class StorageService {
@@ -11,8 +13,24 @@ class StorageService {
   }
 
   Future<void> saveWatchProgress(WatchProgress progress) async {
+    // Save locally
     final box = Hive.box(_watchProgressBox);
     await box.put(progress.contentId.toString(), progress.toJson());
+
+    // Sync to Firestore remotely (fire and forget)
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('watch_progress')
+            .doc(progress.contentId)
+            .set(progress.toJson(), SetOptions(merge: true));
+      } catch (e) {
+        // Ignore network errors in background sync
+      }
+    }
   }
 
   WatchProgress? getWatchProgress(String contentId) {

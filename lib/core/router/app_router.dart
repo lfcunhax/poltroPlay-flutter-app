@@ -125,6 +125,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             contentType: extra['contentType'] as String? ?? 'movie',
             posterPath: extra['posterPath'] as String?,
             isTrailer: extra['isTrailer'] as bool? ?? false,
+            episodes: extra['episodes'] as List<dynamic>?,
+            initialEpisodeIndex: extra['initialEpisodeIndex'] as int?,
           );
         },
       ),

@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:poltro_play/providers/content_provider.dart';
 import 'package:poltro_play/widgets/content_card.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:poltro_play/models/series.dart';
 
 class SeriesScreen extends ConsumerStatefulWidget {
   const SeriesScreen({super.key});
@@ -14,94 +13,122 @@ class SeriesScreen extends ConsumerStatefulWidget {
   ConsumerState<SeriesScreen> createState() => _SeriesScreenState();
 }
 
-class _SeriesScreenState extends ConsumerState<SeriesScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _SeriesScreenState extends ConsumerState<SeriesScreen> {
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 300) {
+      ref.read(paginatedSeriesProvider.notifier).loadMore();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final seriesState = ref.watch(paginatedSeriesProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0A0A0A),
-        title: Text('Séries', style: GoogleFonts.outfit(color: Colors.white)),
+        elevation: 0,
+        title: Text('Séries', style: GoogleFonts.outfit(
+          color: Colors.white,
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
+        )),
         actions: [
           IconButton(
             icon: const Icon(Icons.search, color: Colors.white),
             onPressed: () => context.push('/search'),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: const Color(0xFF7B2FF7),
-          labelColor: const Color(0xFF7B2FF7),
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(text: 'Populares'),
-            Tab(text: 'Mais Votadas'),
-          ],
-        ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildSeriesGrid(popularSeriesProvider),
-          _buildSeriesGrid(topRatedSeriesProvider),
-        ],
+      body: RefreshIndicator(
+        color: const Color(0xFF00D4FF),
+        backgroundColor: const Color(0xFF1A1A2E),
+        onRefresh: () async {
+          await ref.read(paginatedSeriesProvider.notifier).refresh();
+        },
+        child: _buildBody(seriesState),
       ),
     );
   }
 
-  Widget _buildSeriesGrid(FutureProvider<List<Series>> provider) {
-    final seriesAsync = ref.watch(provider);
+  Widget _buildBody(PaginatedState seriesState) {
+    final series = seriesState.items;
 
-    return RefreshIndicator(
-      color: const Color(0xFF00D4FF),
-      backgroundColor: const Color(0xFF1A1A2E),
-      onRefresh: () async {
-        ref.invalidate(provider);
-      },
-      child: seriesAsync.when(
-        data: (series) {
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.7,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
+    if (series.isEmpty && seriesState.isLoading) {
+      return _buildShimmerGrid();
+    }
+
+    if (series.isEmpty && !seriesState.isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.tv_outlined, size: 64, color: Colors.white24),
+            const SizedBox(height: 16),
+            Text(
+              'Nenhuma série encontrada',
+              style: GoogleFonts.inter(color: Colors.white54, fontSize: 16),
             ),
-            itemCount: series.length,
-            itemBuilder: (context, index) {
-              final show = series[index];
-              return ContentCard(
-                imageUrl: show.fullPosterUrl,
-                title: show.name,
-                rating: show.voteAverage,
-                tag: 'series_screen_${show.id}',
-                onTap: () {
-                  context.push('/detail/${show.id}', extra: {'type': 'tv'});
-                },
-              );
-            },
-          );
-        },
-        loading: () => _buildShimmerGrid(),
-        error: (err, stack) => const Center(
-          child: Text('Erro ao carregar séries', style: TextStyle(color: Colors.red)),
+          ],
         ),
+      );
+    }
+
+    return GridView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.65,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
       ),
+      itemCount: series.length + (seriesState.hasMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index >= series.length) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: const Color(0xFF7B2FF7),
+                ),
+              ),
+            ),
+          );
+        }
+
+        final show = series[index];
+        return ContentCard(
+          imageUrl: show.fullPosterUrl,
+          title: show.name,
+          rating: show.voteAverage,
+          tag: 'series_screen_${show.id}',
+          onTap: () {
+            context.push('/detail/${show.id}', extra: {'type': 'tv'});
+          },
+        );
+      },
     );
   }
 
@@ -110,9 +137,9 @@ class _SeriesScreenState extends ConsumerState<SeriesScreen> with SingleTickerPr
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.7,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
+        childAspectRatio: 0.65,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
       ),
       itemCount: 6,
       itemBuilder: (context, index) {

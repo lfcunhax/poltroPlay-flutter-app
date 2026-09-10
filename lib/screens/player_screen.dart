@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,6 +19,8 @@ class PlayerScreen extends ConsumerStatefulWidget {
   final String contentType;
   final String? posterPath;
   final bool isTrailer;
+  final List<dynamic>? episodes;
+  final int? initialEpisodeIndex;
 
   const PlayerScreen({
     super.key,
@@ -27,6 +30,8 @@ class PlayerScreen extends ConsumerStatefulWidget {
     required this.contentType,
     this.posterPath,
     this.isTrailer = false,
+    this.episodes,
+    this.initialEpisodeIndex,
   });
 
   @override
@@ -41,18 +46,51 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   int _lastSavedSecond = -1;
   bool _canPop = false;
 
+  late String _currentVideoUrl;
+  int? _currentIndex;
+  bool _isPlayingNext = false;
+  
+  bool _showBackButton = true;
+  Timer? _hideTimer;
+
   @override
   void initState() {
     super.initState();
+    _currentVideoUrl = widget.videoUrl;
+    _currentIndex = widget.initialEpisodeIndex;
+    
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeRight,
       DeviceOrientation.landscapeLeft,
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _initializePlayer();
+    _startHideTimer();
+  }
+
+  void _startHideTimer() {
+    _hideTimer?.cancel();
+    setState(() {
+      _showBackButton = true;
+    });
+    _hideTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) {
+        setState(() {
+          _showBackButton = false;
+        });
+      }
+    });
+  }
+
+  void _onUserInteraction() {
+    _startHideTimer();
   }
 
   Future<void> _initializePlayer() async {
+    setState(() {
+      _isInitialized = false;
+    });
+
     if (widget.isTrailer) {
       _youtubeController = YoutubePlayerController(
         params: const YoutubePlayerParams(
@@ -61,7 +99,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           mute: false,
         ),
       );
-      _youtubeController!.loadVideoById(videoId: widget.videoUrl);
+      _youtubeController!.loadVideoById(videoId: _currentVideoUrl);
       if (mounted) {
         setState(() {
           _isInitialized = true;
@@ -71,15 +109,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
 
     _videoPlayerController =
-        VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+        VideoPlayerController.networkUrl(Uri.parse(_currentVideoUrl));
     await _videoPlayerController.initialize();
 
     // Restore saved progress
     final storage = StorageService();
-    final savedProgress = storage.getWatchProgress(widget.contentId);
+    String pId = widget.contentId;
+    if (widget.episodes != null && _currentIndex != null && _currentIndex! < widget.episodes!.length) {
+      final ep = widget.episodes![_currentIndex!];
+      pId = '${widget.contentId}_${ep.seasonNumber}_${ep.episodeNumber}';
+    }
+    final savedProgress = storage.getWatchProgress(pId);
     if (savedProgress != null && savedProgress.positionMs > 0) {
-      await _videoPlayerController
-          .seekTo(Duration(milliseconds: savedProgress.positionMs));
+      // Don't seek if we are almost at the end (prevent looping back to end)
+      if (savedProgress.positionMs < _videoPlayerController.value.duration.inMilliseconds - 5000) {
+        await _videoPlayerController.seekTo(Duration(milliseconds: savedProgress.positionMs));
+      }
     }
 
     _videoPlayerController.addListener(_onVideoProgress);
@@ -88,6 +133,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       videoPlayerController: _videoPlayerController,
       autoPlay: true,
       looping: false,
+      allowPlaybackSpeedChanging: false,
+      showOptions: false,
       aspectRatio: _videoPlayerController.value.aspectRatio,
       materialProgressColors: ChewieProgressColors(
         playedColor: const Color(0xFF00D4FF),
@@ -106,6 +153,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (mounted) {
       setState(() {
         _isInitialized = true;
+        _isPlayingNext = false;
       });
     }
   }
@@ -114,6 +162,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (!_videoPlayerController.value.isInitialized) return;
 
     final position = _videoPlayerController.value.position.inSeconds;
+    final duration = _videoPlayerController.value.duration.inSeconds;
+
+    // Auto-play Next Episode
+    if (position >= duration - 1 && duration > 0 && !_isPlayingNext) {
+      if (widget.episodes != null && _currentIndex != null && _currentIndex! < widget.episodes!.length - 1) {
+        _isPlayingNext = true;
+        _playEpisode(_currentIndex! + 1);
+        return;
+      }
+    }
 
     // Save progress every 10 seconds
     if (position > 0 && position != _lastSavedSecond && position % 10 == 0) {
@@ -128,11 +186,35 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  Future<void> _playEpisode(int index) async {
+    if (widget.episodes == null || index < 0 || index >= widget.episodes!.length) return;
+    
+    await _saveProgress(); // Save current before switching
+    
+    final ep = widget.episodes![index];
+    _videoPlayerController.removeListener(_onVideoProgress);
+    _chewieController?.dispose();
+    await _videoPlayerController.dispose();
+    
+    setState(() {
+      _currentIndex = index;
+      _currentVideoUrl = ep.videoUrl;
+    });
+    
+    _initializePlayer();
+  }
+
   Future<void> _saveProgress() async {
     if (!_videoPlayerController.value.isInitialized) return;
 
+    String pId = widget.contentId;
+    if (widget.episodes != null && _currentIndex != null && _currentIndex! < widget.episodes!.length) {
+      final ep = widget.episodes![_currentIndex!];
+      pId = '${widget.contentId}_${ep.seasonNumber}_${ep.episodeNumber}';
+    }
+
     final progress = WatchProgress(
-      contentId: widget.contentId,
+      contentId: pId,
       contentType: widget.contentType,
       title: widget.title,
       posterPath: widget.posterPath,
@@ -145,18 +227,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     ref.read(watchProgressListProvider.notifier).saveProgress(progress);
   }
 
-  Future<bool> _onWillPop() async {
-    await _saveProgress();
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    return true;
-  }
-
   @override
   void dispose() {
+    _hideTimer?.cancel();
     if (!widget.isTrailer) {
       _saveProgress();
       _videoPlayerController.removeListener(_onVideoProgress);
@@ -238,6 +311,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         });
       }
     }
+  } // fim _handleBack
+
+  Widget _buildVideoPlayer() {
+    if (widget.isTrailer && _youtubeController != null) {
+      return YoutubePlayer(
+        controller: _youtubeController!,
+      );
+    }
+
+    if (_chewieController == null) return const Center(child: CircularProgressIndicator());
+
+    return Chewie(controller: _chewieController!);
   }
 
   @override
@@ -250,65 +335,55 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: Stack(
-          children: [
-            Positioned.fill(
-              child: _isInitialized
-                  ? (widget.isTrailer && _youtubeController != null)
-                      ? YoutubePlayer(
-                          controller: _youtubeController!,
-                        )
-                      : (_chewieController != null
-                          ? Chewie(controller: _chewieController!)
-                          : const Center(child: CircularProgressIndicator()))
-                  : const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CircularProgressIndicator(color: Color(0xFF7B2FF7)),
-                          SizedBox(height: 16),
-                          Text(
-                            'Carregando vídeo...',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                        ],
+        body: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTapDown: (_) => _onUserInteraction(),
+          onPanDown: (_) => _onUserInteraction(),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: _isInitialized
+                    ? _buildVideoPlayer()
+                    : const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(color: Color(0xFF7B2FF7)),
+                            SizedBox(height: 16),
+                            Text(
+                              'Carregando vídeo...',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
+              // Back button, smaller and auto-hiding
+              Positioned(
+                top: 16,
+                left: 16,
+                child: SafeArea(
+                  child: AnimatedOpacity(
+                    opacity: _showBackButton ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: IgnorePointer(
+                      ignoring: !_showBackButton,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.black26,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                          onPressed: _handleBack,
+                        ),
                       ),
                     ),
-            ),
-            Positioned(
-              top: 16,
-              left: 16,
-              child: SafeArea(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.black54,
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: _handleBack,
                   ),
                 ),
               ),
-            ),
-            Positioned(
-              top: 16,
-              right: 16,
-              child: SafeArea(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.black54,
-                    shape: BoxShape.circle,
-                  ),
-                  child: CastButton(
-                    videoUrl: widget.videoUrl,
-                    title: widget.title,
-                    posterUrl: widget.posterPath,
-                  ),
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

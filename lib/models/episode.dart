@@ -26,6 +26,18 @@ class Episode {
     );
   }
 
+  /// Constrói Episode a partir da resposta da API REST PostgreSQL (snake_case)
+  factory Episode.fromApi(Map<String, dynamic> json) {
+    return Episode(
+      id: json['id']?.toString() ?? '',
+      seasonNumber: int.tryParse((json['season_number'] ?? json['seasonNumber'] ?? '1').toString()) ?? 1,
+      episodeNumber: int.tryParse((json['episode_number'] ?? json['episodeNumber'] ?? '1').toString()) ?? 1,
+      title: json['title'] ?? '',
+      videoUrl: json['video_url'] ?? json['videoUrl'] ?? '',
+    );
+  }
+
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

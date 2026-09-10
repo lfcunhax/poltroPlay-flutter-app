@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:poltro_play/models/episode.dart';
+import 'package:poltro_play/models/watch_progress.dart';
 import 'package:poltro_play/providers/content_provider.dart';
+import 'package:poltro_play/providers/watch_progress_provider.dart';
+import 'package:poltro_play/core/services/ad_service.dart';
 
 class EpisodesSection extends ConsumerStatefulWidget {
   final String seriesId;
@@ -27,6 +30,7 @@ class _EpisodesSectionState extends ConsumerState<EpisodesSection> {
   @override
   Widget build(BuildContext context) {
     final episodesAsync = ref.watch(seriesEpisodesProvider(widget.seriesId));
+    final watchProgressList = ref.watch(watchProgressListProvider);
 
     return episodesAsync.when(
       data: (episodes) {
@@ -111,6 +115,21 @@ class _EpisodesSectionState extends ConsumerState<EpisodesSection> {
               itemCount: currentEpisodes.length,
               itemBuilder: (context, index) {
                 final ep = currentEpisodes[index];
+                
+                // Get progress for this specific episode
+                final progressId = '${widget.seriesId}_${ep.seasonNumber}_${ep.episodeNumber}';
+                WatchProgress? epProgress;
+                try {
+                  epProgress = watchProgressList.firstWhere((p) => p.contentId == progressId);
+                } catch (_) {}
+                
+                double pct = 0.0;
+                bool isCompleted = false;
+                if (epProgress != null && epProgress.durationMs > 0) {
+                  pct = epProgress.positionMs / epProgress.durationMs;
+                  if (pct > 0.95) isCompleted = true; // Considere assistido se > 95%
+                }
+
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
@@ -118,49 +137,94 @@ class _EpisodesSectionState extends ConsumerState<EpisodesSection> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                   ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    leading: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1A1A2E),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF7B2FF7).withValues(alpha: 0.5)),
-                      ),
-                      child: Center(
-                        child: Text(
-                          '${ep.episodeNumber}',
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Stack(
+                      children: [
+                        ListTile(
+                          onTap: () {
+                            AdService().showInterstitialAd(() {
+                              if (context.mounted) {
+                                context.push('/player', extra: {
+                                  'videoUrl': ep.videoUrl,
+                                  'title': '${widget.seriesTitle} - S${ep.seasonNumber}E${ep.episodeNumber}: ${ep.title}',
+                                  'contentId': widget.seriesId,
+                                  'contentType': 'tv',
+                                  'posterPath': widget.posterPath,
+                                  'episodes': currentEpisodes,
+                                  'initialEpisodeIndex': index,
+                                });
+                              }
+                            });
+                          },
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          leading: Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: isCompleted ? const Color(0xFF7B2FF7).withValues(alpha: 0.2) : const Color(0xFF1A1A2E),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isCompleted 
+                                  ? const Color(0xFF00D4FF) 
+                                  : const Color(0xFF7B2FF7).withValues(alpha: 0.5)
+                              ),
+                            ),
+                            child: Center(
+                              child: isCompleted 
+                                ? const Icon(Icons.check, color: Color(0xFF00D4FF), size: 24)
+                                : Text(
+                                    '${ep.episodeNumber}',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                            ),
+                          ),
+                          title: Text(
+                            ep.title,
+                            style: GoogleFonts.inter(
+                              color: isCompleted ? Colors.white70 : Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Temporada ${ep.seasonNumber} • Episódio ${ep.episodeNumber}',
+                            style: GoogleFonts.inter(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                          trailing: const Icon(
+                            Icons.play_circle_fill,
+                            color: Color(0xFF7B2FF7),
+                            size: 32,
                           ),
                         ),
-                      ),
-                    ),
-                    title: Text(
-                      ep.title,
-                      style: GoogleFonts.inter(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    subtitle: Text(
-                      'T${ep.seasonNumber.toString().padLeft(2, '0')} E${ep.episodeNumber.toString().padLeft(2, '0')}',
-                      style: GoogleFonts.inter(color: Colors.white54, fontSize: 12),
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.play_circle_fill, color: Color(0xFF00D4FF), size: 36),
-                      onPressed: () {
-                        context.push('/player', extra: {
-                          'videoUrl': ep.videoUrl,
-                          'title': '${widget.seriesTitle} - S${ep.seasonNumber}E${ep.episodeNumber}: ${ep.title}',
-                          'contentId': widget.seriesId,
-                          'contentType': 'tv',
-                          'posterPath': widget.posterPath,
-                        });
-                      },
+                        
+                        // Progress Bar (bottom edge)
+                        if (pct > 0 && !isCompleted)
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            height: 3,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: (pct * 100).toInt(),
+                                  child: Container(color: const Color(0xFFE94560)),
+                                ),
+                                Expanded(
+                                  flex: ((1 - pct) * 100).toInt(),
+                                  child: Container(color: Colors.transparent),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 );
@@ -175,7 +239,7 @@ class _EpisodesSectionState extends ConsumerState<EpisodesSection> {
           child: CircularProgressIndicator(color: Color(0xFF7B2FF7)),
         ),
       ),
-      error: (_, __) => const Padding(
+      error: (error, stack) => const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
         child: Text('Erro ao carregar episódios.', style: TextStyle(color: Colors.redAccent)),
       ),

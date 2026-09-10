@@ -9,6 +9,7 @@ import 'package:poltro_play/providers/favorites_provider.dart';
 import 'package:poltro_play/core/services/ad_service.dart';
 import 'package:poltro_play/models/movie.dart';
 import 'package:poltro_play/models/series.dart';
+import 'package:poltro_play/models/episode.dart';
 import 'package:poltro_play/providers/content_provider.dart';
 import 'package:poltro_play/widgets/shimmer_loading.dart';
 import 'package:poltro_play/widgets/episodes_section.dart';
@@ -74,8 +75,7 @@ class DetailScreen extends ConsumerWidget {
             : '');
     final String videoUrl = (detail is Movie) ? (detail.videoUrl ?? AppConstants.sampleVideoUrl) : ((detail as Series).videoUrl ?? AppConstants.sampleVideoUrl);
 
-    final favorites = ref.watch(favoritesProvider);
-    final isFavorite = ref.read(favoritesProvider.notifier).isFavorite(detail);
+    final isFavorite = ref.watch(favoritesProvider).any((e) => e.id == detail.id);
 
     return CustomScrollView(
       slivers: [
@@ -171,20 +171,32 @@ class DetailScreen extends ConsumerWidget {
                     ),
                     if (!isMovie) ...[
                       const SizedBox(width: 16),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFF7B2FF7)),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '${(detail as Series).numberOfSeasons ?? '?'} Temporadas',
-                          style: GoogleFonts.inter(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
+                      Consumer(
+                        builder: (context, ref, child) {
+                          int? numSeasons = (detail as Series).numberOfSeasons;
+                          if (numSeasons == null) {
+                            final episodesAsync = ref.watch(seriesEpisodesProvider(contentId));
+                            if (episodesAsync.hasValue && episodesAsync.value != null && episodesAsync.value!.isNotEmpty) {
+                              numSeasons = episodesAsync.value!.map((e) => e.seasonNumber).toSet().length;
+                            }
+                          }
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: const Color(0xFF7B2FF7)),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '${numSeasons ?? '?'} Temporadas',
+                              style: GoogleFonts.inter(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ],
@@ -243,13 +255,40 @@ class DetailScreen extends ConsumerWidget {
 
                             AdService().showInterstitialAd(() {
                               if (context.mounted) {
-                                context.push('/player', extra: {
-                                  'videoUrl': videoUrl,
-                                  'title': title,
-                                  'contentId': contentId,
-                                  'contentType': mediaType,
-                                  'posterPath': posterPath,
-                                });
+                                if (isMovie) {
+                                  context.push('/player', extra: {
+                                    'videoUrl': videoUrl,
+                                    'title': title,
+                                    'contentId': contentId,
+                                    'contentType': mediaType,
+                                    'posterPath': posterPath,
+                                  });
+                                } else {
+                                  // Pegar o primeiro episódio da série
+                                  final episodesAsync = ref.read(seriesEpisodesProvider(contentId));
+                                  episodesAsync.whenData((episodes) {
+                                    if (episodes.isEmpty) return;
+                                    
+                                    // Ordena e pega o S01E01 (ou o primeiro disponível)
+                                    final sortedEpis = List<Episode>.from(episodes)
+                                      ..sort((a, b) {
+                                        if (a.seasonNumber != b.seasonNumber) return a.seasonNumber.compareTo(b.seasonNumber);
+                                        return a.episodeNumber.compareTo(b.episodeNumber);
+                                      });
+                                    
+                                    final firstEp = sortedEpis.first;
+                                    
+                                    context.push('/player', extra: {
+                                      'videoUrl': firstEp.videoUrl,
+                                      'title': '$title - S${firstEp.seasonNumber}E${firstEp.episodeNumber}: ${firstEp.title}',
+                                      'contentId': contentId,
+                                      'contentType': 'tv',
+                                      'posterPath': posterPath,
+                                      'episodes': sortedEpis,
+                                      'initialEpisodeIndex': 0,
+                                    });
+                                  });
+                                }
                               }
                             });
                           },
@@ -426,7 +465,7 @@ class DetailScreen extends ConsumerWidget {
                           );
                         },
                         loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFF7B2FF7))),
-                        error: (_, __) => const SizedBox(),
+                        error: (err, stack) => const SizedBox(),
                       );
                     },
                   ),
