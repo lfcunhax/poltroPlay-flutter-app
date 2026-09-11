@@ -1,15 +1,46 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:poltro_play/providers/rewards_provider.dart';
 import 'package:poltro_play/widgets/banner_ad_widget.dart';
-import 'package:poltro_play/widgets/cast_button.dart';
+import 'package:poltro_play/widgets/daily_checkin_modal.dart';
+import 'package:poltro_play/widgets/pipocas_badge.dart';
+import 'package:poltro_play/widgets/rewards_onboarding_modal.dart';
 
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerStatefulWidget {
   final Widget child;
   
   const MainShell({super.key, required this.child});
+
+  @override
+  ConsumerState<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends ConsumerState<MainShell> {
+  static bool _hasTriggeredInitialPopup = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndShowInitialRewardsPopup();
+    });
+  }
+
+  void _checkAndShowInitialRewardsPopup() {
+    if (!mounted || _hasTriggeredInitialPopup) return;
+    _hasTriggeredInitialPopup = true;
+
+    final rewards = ref.read(rewardsProvider);
+    if (!rewards.hasSeenTutorial) {
+      showRewardsOnboardingModal(context);
+    } else if (rewards.canClaimDailyBonus) {
+      showDailyCheckInModal(context);
+    }
+  }
 
   int _calculateSelectedIndex(BuildContext context) {
     final String location = GoRouterState.of(context).uri.path;
@@ -129,9 +160,9 @@ class MainShell extends StatelessWidget {
             icon: const Icon(Icons.search, color: Colors.white),
             onPressed: () => context.push('/search'),
           ),
-          const CastButton(
-            size: 24.0,
-            color: Colors.white,
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            child: PipocasBadge(),
           ),
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
@@ -141,7 +172,7 @@ class MainShell extends StatelessWidget {
       ),
       body: Column(
         children: [
-          Expanded(child: child),
+          Expanded(child: widget.child),
           const BannerAdWidget(), // Always visible ad
           const SizedBox(height: 90), // Offset for the translucent bottom nav bar
         ],

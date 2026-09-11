@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
-import 'package:poltro_play/models/episode.dart';
 import 'package:poltro_play/models/watch_progress.dart';
 import 'package:poltro_play/providers/content_provider.dart';
 import 'package:poltro_play/providers/watch_progress_provider.dart';

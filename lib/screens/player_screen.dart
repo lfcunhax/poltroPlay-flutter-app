@@ -10,7 +10,6 @@ import 'package:poltro_play/models/watch_progress.dart';
 import 'package:poltro_play/providers/watch_progress_provider.dart';
 import 'package:poltro_play/core/services/storage_service.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import 'package:poltro_play/widgets/cast_button.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final String videoUrl;

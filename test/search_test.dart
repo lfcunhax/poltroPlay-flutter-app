@@ -94,5 +94,28 @@ void main() {
       expect(fromJson.voteAverage, equals(movie.voteAverage));
       expect(fromJson.tags, equals(movie.tags));
     });
+
+    test('Movie.fromApi parses PostgreSQL snake_case columns properly', () {
+      final pgJson = {
+        'id': 105,
+        'tmdb_id': 1076601,
+        'title': 'Luccas Neto em: Acampamento de Férias 4',
+        'overview': 'Sinopse oficial',
+        'poster_path': '/poster_pg.jpg',
+        'backdrop_path': '/backdrop_pg.jpg',
+        'vote_average': '7.5',
+        'release_date': '2024-06-15',
+        'video_url': 'http://fhd4.oneplayer.site/movie.mp4',
+        'tags': ['Comédia', 'Família'],
+      };
+
+      final movie = Movie.fromApi(pgJson);
+      expect(movie.id, equals('105'));
+      expect(movie.tmdbId, equals(1076601));
+      expect(movie.title, equals('Luccas Neto em: Acampamento de Férias 4'));
+      expect(movie.videoUrl, equals('http://fhd4.oneplayer.site/movie.mp4'));
+      expect(movie.voteAverage, equals(7.5));
+      expect(movie.posterPath, equals('/poster_pg.jpg'));
+    });
   });
 }

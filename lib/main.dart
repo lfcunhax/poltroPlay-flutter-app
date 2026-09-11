@@ -12,6 +12,7 @@ import 'package:poltro_play/core/router/app_router.dart';
 import 'package:poltro_play/core/services/ad_service.dart';
 import 'package:poltro_play/core/services/notification_service.dart';
 import 'package:poltro_play/core/services/storage_service.dart';
+import 'package:poltro_play/core/services/rewards_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -51,6 +52,7 @@ void main() async {
   // Initialize Hive for local storage
   await Hive.initFlutter();
   await StorageService().init();
+  RewardsService().init();
 
   // Initialize AdMob (await is safe here as it doesn't show UI)
   await AdService().initialize();

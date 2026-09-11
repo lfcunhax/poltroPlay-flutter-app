@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:poltro_play/core/services/firestore_service.dart';
 import 'package:poltro_play/core/services/series_api_service.dart';
+import 'package:poltro_play/core/services/movie_api_service.dart';
 import 'package:poltro_play/models/movie.dart';
 import 'package:poltro_play/models/series.dart';
 import 'package:poltro_play/models/cast.dart';
@@ -20,6 +21,10 @@ final tmdbServiceProvider = Provider<TmdbService>((ref) {
 
 final seriesApiServiceProvider = Provider<SeriesApiService>((ref) {
   return SeriesApiService();
+});
+
+final movieApiServiceProvider = Provider<MovieApiService>((ref) {
+  return MovieApiService();
 });
 
 // --- ESTADO PAGINADO PARA FILMES ---
@@ -57,26 +62,41 @@ class PaginatedState<T> {
 }
 
 class MoviesNotifier extends StateNotifier<PaginatedState<Movie>> {
-  MoviesNotifier() : super(const PaginatedState<Movie>()) {
+  final MovieApiService _api;
+
+  MoviesNotifier(this._api) : super(const PaginatedState<Movie>()) {
     loadInitial();
   }
 
   Future<void> loadInitial() async {
     if (state.isLoading) return;
-    state = state.copyWith(isLoading: true);
+    state = state.copyWith(isLoading: true, currentPage: 1);
 
     try {
+      // 1. Tenta carregar da API REST PostgreSQL
+      final movies = await _api.getMovies(page: 1);
+      if (movies.isNotEmpty) {
+        state = PaginatedState<Movie>(
+          items: movies,
+          isLoading: false,
+          hasMore: movies.length >= 20,
+          currentPage: 1,
+        );
+        return;
+      }
+
+      // 2. Fallback temporário para o Firestore caso o banco ainda esteja migrando
       final query = FirebaseFirestore.instance.collection('movies')
           .orderBy('createdAt', descending: true)
           .limit(20);
 
       final snapshot = await query.get();
-      final movies = snapshot.docs.map((doc) => Movie.fromFirestore(doc)).toList();
+      final firestoreMovies = snapshot.docs.map((doc) => Movie.fromFirestore(doc)).toList();
 
       state = PaginatedState<Movie>(
-        items: movies,
+        items: firestoreMovies,
         isLoading: false,
-        hasMore: movies.length >= 20,
+        hasMore: firestoreMovies.length >= 20,
         lastDoc: snapshot.docs.isNotEmpty ? snapshot.docs.last : null,
       );
     } catch (e) {
@@ -86,24 +106,41 @@ class MoviesNotifier extends StateNotifier<PaginatedState<Movie>> {
   }
 
   Future<void> loadMore() async {
-    if (state.isLoading || !state.hasMore || state.lastDoc == null) return;
+    if (state.isLoading || !state.hasMore) return;
     state = state.copyWith(isLoading: true);
 
     try {
-      final query = FirebaseFirestore.instance.collection('movies')
-          .orderBy('createdAt', descending: true)
-          .startAfterDocument(state.lastDoc!)
-          .limit(20);
+      // Se estava usando a API REST
+      if (state.currentPage > 0 && state.lastDoc == null) {
+        final nextPage = state.currentPage + 1;
+        final newMovies = await _api.getMovies(page: nextPage);
 
-      final snapshot = await query.get();
-      final newMovies = snapshot.docs.map((doc) => Movie.fromFirestore(doc)).toList();
+        state = state.copyWith(
+          items: [...state.items, ...newMovies],
+          isLoading: false,
+          hasMore: newMovies.length >= 20,
+          currentPage: nextPage,
+        );
+        return;
+      }
 
-      state = state.copyWith(
-        items: [...state.items, ...newMovies],
-        isLoading: false,
-        hasMore: newMovies.length >= 20,
-        lastDoc: snapshot.docs.isNotEmpty ? snapshot.docs.last : state.lastDoc,
-      );
+      // Fallback Firestore
+      if (state.lastDoc != null) {
+        final query = FirebaseFirestore.instance.collection('movies')
+            .orderBy('createdAt', descending: true)
+            .startAfterDocument(state.lastDoc!)
+            .limit(20);
+
+        final snapshot = await query.get();
+        final newMovies = snapshot.docs.map((doc) => Movie.fromFirestore(doc)).toList();
+
+        state = state.copyWith(
+          items: [...state.items, ...newMovies],
+          isLoading: false,
+          hasMore: newMovies.length >= 20,
+          lastDoc: snapshot.docs.isNotEmpty ? snapshot.docs.last : state.lastDoc,
+        );
+      }
     } catch (e) {
       print("Error loading more movies: $e");
       state = state.copyWith(isLoading: false);
@@ -171,7 +208,8 @@ class SeriesNotifier extends StateNotifier<PaginatedState<Series>> {
 }
 
 final paginatedMoviesProvider = StateNotifierProvider<MoviesNotifier, PaginatedState<Movie>>((ref) {
-  return MoviesNotifier();
+  final api = ref.watch(movieApiServiceProvider);
+  return MoviesNotifier(api);
 });
 
 final paginatedSeriesProvider = StateNotifierProvider<SeriesNotifier, PaginatedState<Series>>((ref) {
@@ -182,13 +220,29 @@ final paginatedSeriesProvider = StateNotifierProvider<SeriesNotifier, PaginatedS
 // --- PROVIDERS EXISTENTES (para home_screen e outras telas) ---
 
 final trendingMoviesProvider = FutureProvider<List<Movie>>((ref) async {
+  final movieApi = ref.watch(movieApiServiceProvider);
+  final movies = await movieApi.getMovies(page: 1);
+  if (movies.isNotEmpty) return movies;
   final service = ref.watch(firestoreServiceProvider);
   return service.getTrendingMovies();
 });
 
 final highlightsProvider = FutureProvider<List<dynamic>>((ref) async {
-  final service = ref.watch(firestoreServiceProvider);
-  return service.getHighlights();
+  final movieApi = ref.watch(movieApiServiceProvider);
+  final seriesApi = ref.watch(seriesApiServiceProvider);
+  final firestoreService = ref.watch(firestoreServiceProvider);
+
+  try {
+    final movieHighlights = await movieApi.getHighlights();
+    final seriesHighlights = await seriesApi.getHighlights();
+    final combined = [...movieHighlights, ...seriesHighlights];
+    if (combined.isNotEmpty) {
+      combined.shuffle();
+      return combined;
+    }
+  } catch (_) {}
+
+  return firestoreService.getHighlights();
 });
 
 final trendingSeriesProvider = FutureProvider<List<Series>>((ref) async {
@@ -197,6 +251,9 @@ final trendingSeriesProvider = FutureProvider<List<Series>>((ref) async {
 });
 
 final popularMoviesProvider = FutureProvider<List<Movie>>((ref) async {
+  final movieApi = ref.watch(movieApiServiceProvider);
+  final movies = await movieApi.getMovies(page: 1);
+  if (movies.isNotEmpty) return movies;
   final service = ref.watch(firestoreServiceProvider);
   return service.getPopularMovies();
 });
@@ -207,6 +264,12 @@ final popularSeriesProvider = FutureProvider<List<Series>>((ref) async {
 });
 
 final topRatedMoviesProvider = FutureProvider<List<Movie>>((ref) async {
+  final movieApi = ref.watch(movieApiServiceProvider);
+  final movies = await movieApi.getMovies(page: 1);
+  if (movies.isNotEmpty) {
+    final sorted = [...movies]..sort((a, b) => b.voteAverage.compareTo(a.voteAverage));
+    return sorted;
+  }
   final service = ref.watch(firestoreServiceProvider);
   return service.getTopRatedMovies();
 });
@@ -217,13 +280,37 @@ final topRatedSeriesProvider = FutureProvider<List<Series>>((ref) async {
 });
 
 final nowPlayingMoviesProvider = FutureProvider<List<Movie>>((ref) async {
+  final movieApi = ref.watch(movieApiServiceProvider);
+  final movies = await movieApi.getMovies(page: 1);
+  if (movies.isNotEmpty) return movies;
   final service = ref.watch(firestoreServiceProvider);
   return service.getNowPlayingMovies();
 });
 
 final movieDetailProvider = FutureProvider.family<Movie, String>((ref, id) async {
-  final service = ref.watch(firestoreServiceProvider);
-  return service.getMovieDetail(id);
+  final movieApi = ref.watch(movieApiServiceProvider);
+  final firestoreService = ref.watch(firestoreServiceProvider);
+
+  // 1. Tenta buscar pela API REST PostgreSQL primeiro (se id for numérico)
+  final intId = int.tryParse(id);
+  if (intId != null) {
+    try {
+      final movie = await movieApi.getMovieById(intId);
+      if (movie != null) return movie;
+    } catch (e) {
+      print("MovieApiService.getMovieById failed: $e");
+    }
+  }
+
+  // 2. Fallback para o Firestore
+  try {
+    return await firestoreService.getMovieDetail(id);
+  } catch (e) {
+    if (intId != null) {
+      throw Exception('Filme não encontrado');
+    }
+    rethrow;
+  }
 });
 
 final seriesDetailProvider = FutureProvider.family<Series, String>((ref, id) async {
@@ -244,16 +331,24 @@ final searchProvider = FutureProvider.family<List<dynamic>, String>((ref, query)
   if (cleanQuery.isEmpty) return [];
 
   final firestoreService = ref.watch(firestoreServiceProvider);
-  final apiService = ref.watch(seriesApiServiceProvider);
+  final seriesApiService = ref.watch(seriesApiServiceProvider);
+  final movieApiService = ref.watch(movieApiServiceProvider);
 
-  // Busca filmes no Firestore e séries na API em paralelo
+  // Busca filmes e séries em paralelo na API PostgreSQL
   final results = await Future.wait([
-    firestoreService.searchContent(cleanQuery),
-    apiService.searchSeries(cleanQuery),
+    movieApiService.searchMovies(cleanQuery),
+    seriesApiService.searchSeries(cleanQuery),
   ]);
 
-  final movies = results[0] as List<Movie>;
+  var movies = results[0] as List<Movie>;
   final series = results[1] as List<Series>;
+
+  // Fallback para o Firestore caso a API de filmes ainda não tenha retornado itens
+  if (movies.isEmpty) {
+    try {
+      movies = await firestoreService.searchContent(cleanQuery);
+    } catch (_) {}
+  }
 
   // Evita sobrescrita de chaves entre filmes e séries usando prefixo de tipo
   final combined = <String, dynamic>{};

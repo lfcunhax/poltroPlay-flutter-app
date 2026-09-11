@@ -42,18 +42,35 @@ class Movie {
     );
   }
 
-  // Fallback if needed for parsing direct TMDB JSON (if any)
-  factory Movie.fromJson(Map<String, dynamic> json) {
+  factory Movie.fromJson(Map<String, dynamic> json) => Movie.fromApi(json);
+
+  factory Movie.fromApi(Map<String, dynamic> json) {
+    int parsedTmdbId = 0;
+    final rawTmdb = json['tmdb_id'] ?? json['tmdbId'];
+    if (rawTmdb is int) {
+      parsedTmdbId = rawTmdb;
+    } else if (rawTmdb != null) {
+      parsedTmdbId = int.tryParse(rawTmdb.toString()) ?? 0;
+    }
+
+    double parsedVote = 0.0;
+    final rawVote = json['vote_average'] ?? json['voteAverage'];
+    if (rawVote is num) {
+      parsedVote = rawVote.toDouble();
+    } else if (rawVote != null) {
+      parsedVote = double.tryParse(rawVote.toString()) ?? 0.0;
+    }
+
     return Movie(
       id: json['id']?.toString() ?? '',
-      tmdbId: json['tmdbId'] is int ? json['tmdbId'] : (int.tryParse(json['tmdbId']?.toString() ?? '') ?? 0),
+      tmdbId: parsedTmdbId,
       title: json['title'] ?? '',
       overview: json['overview'] ?? '',
       posterPath: json['poster_path'] ?? json['posterPath'],
       backdropPath: json['backdrop_path'] ?? json['backdropPath'],
-      voteAverage: (json['vote_average'] ?? json['voteAverage'] ?? 0).toDouble(),
+      voteAverage: parsedVote,
       releaseDate: json['release_date'] ?? json['releaseDate'],
-      videoUrl: json['videoUrl'],
+      videoUrl: json['video_url'] ?? json['videoUrl'],
       tags: List<String>.from(json['tags'] ?? []),
     );
   }

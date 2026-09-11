@@ -21,6 +21,8 @@ class AppConstants {
   static const String admobAppId = 'ca-app-pub-4692366968655291~3011715254';
   static const String bannerAdUnitId = 'ca-app-pub-4692366968655291/8902336183';
   static const String interstitialAdUnitId = 'ca-app-pub-4692366968655291/1023846161';
+  // ID de teste oficial do Google para Anúncios Recompensados (substituir pelo ID real do painel AdMob quando criado)
+  static const String rewardedAdUnitId = 'ca-app-pub-4692366968655291/4606822742';
 
   // Sample Video URL for testing (HLS M3U8 Stream to simulate Xtream API)
   static const String sampleVideoUrl =

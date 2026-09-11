@@ -3,7 +3,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:convert';
-import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:poltro_play/core/router/app_router.dart';
@@ -31,6 +30,15 @@ class NotificationService {
       badge: true,
       sound: true,
     );
+
+    // Permissão em tempo de execução para Android 13+ (Tiramisu / API 33+)
+    try {
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+    } catch (e) {
+      if (kDebugMode) print('Erro ao solicitar permissao Android 13+: $e');
+    }
     
     if (kDebugMode) {
       print('User granted notification permission: ${settings.authorizationStatus}');
@@ -38,7 +46,7 @@ class NotificationService {
   }
 
   Future<void> _setupLocalNotifications() async {
-    const AndroidInitializationSettings androidInit = AndroidInitializationSettings('@drawable/ic_stat_notification');
+    const AndroidInitializationSettings androidInit = AndroidInitializationSettings('@mipmap/launcher_icon');
     const DarwinInitializationSettings iosInit = DarwinInitializationSettings();
     const InitializationSettings initSettings = InitializationSettings(
       android: androidInit,
@@ -100,9 +108,20 @@ class NotificationService {
     if (title == null && body == null) return;
 
     final FlutterLocalNotificationsPlugin localNotifications = FlutterLocalNotificationsPlugin();
-    const AndroidInitializationSettings androidInit = AndroidInitializationSettings('@drawable/ic_stat_notification');
+    const AndroidInitializationSettings androidInit = AndroidInitializationSettings('@mipmap/launcher_icon');
     const InitializationSettings initSettings = InitializationSettings(android: androidInit);
     await localNotifications.initialize(settings: initSettings);
+
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'high_importance_channel',
+      'High Importance Notifications',
+      description: 'This channel is used for important notifications.',
+      importance: Importance.high,
+    );
+
+    await localNotifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
 
     final String? imageUrl = message.data['imageUrl'] ?? message.notification?.android?.imageUrl;
     BigPictureStyleInformation? bigPictureStyleInformation;
@@ -135,7 +154,7 @@ class NotificationService {
           channelDescription: 'This channel is used for important notifications.',
           importance: Importance.high,
           priority: Priority.high,
-          icon: '@drawable/ic_stat_notification',
+          icon: '@mipmap/launcher_icon',
           styleInformation: bigPictureStyleInformation,
         ),
       ),
@@ -176,7 +195,7 @@ class NotificationService {
           channelDescription: 'This channel is used for important notifications.',
           importance: Importance.high,
           priority: Priority.high,
-          icon: '@drawable/ic_stat_notification',
+          icon: '@mipmap/launcher_icon',
           styleInformation: bigPictureStyleInformation,
         ),
         iOS: const DarwinNotificationDetails(

@@ -14,7 +14,9 @@ import 'package:poltro_play/providers/content_provider.dart';
 import 'package:poltro_play/widgets/shimmer_loading.dart';
 import 'package:poltro_play/widgets/episodes_section.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:poltro_play/widgets/cast_button.dart';
+import 'package:poltro_play/widgets/pipocas_badge.dart';
+import 'package:poltro_play/providers/rewards_provider.dart';
+import 'package:poltro_play/widgets/rewards_modal.dart';
 class DetailScreen extends ConsumerWidget {
   final String contentId;
   final String mediaType;
@@ -85,10 +87,9 @@ class DetailScreen extends ConsumerWidget {
           backgroundColor: const Color(0xFF0A0A0A),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
-            CastButton(
-              videoUrl: videoUrl,
-              title: title,
-              posterUrl: backdropUrl.isNotEmpty ? backdropUrl : null,
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: PipocasBadge(),
             ),
             IconButton(
               icon: Icon(
@@ -353,7 +354,91 @@ class DetailScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
+
+                // Pipocas & VIP Status Banner
+                Consumer(
+                  builder: (context, ref, _) {
+                    final rewards = ref.watch(rewardsProvider);
+                    if (rewards.isAdFreeActive) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF9900).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFFF9900).withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Text('👑', style: TextStyle(fontSize: 18)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Modo VIP Ativo: assistindo 100% sem anúncios!',
+                                style: GoogleFonts.outfit(
+                                  color: const Color(0xFFFFB300),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return InkWell(
+                      onTap: () {
+                        if (rewards.balance >= 10) {
+                          final success = ref.read(rewardsProvider.notifier).usePipocasForMovie();
+                          if (success) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: const Color(0xFF00D4FF),
+                                behavior: SnackBarBehavior.floating,
+                                content: Text(
+                                  '🍿 -10 Pipocas! Modo sem anúncios ativado por 2 horas.',
+                                  style: GoogleFonts.outfit(color: Colors.black, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            );
+                          }
+                        } else {
+                          showRewardsModal(context);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E2E).withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF7B2FF7).withValues(alpha: 0.35)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Text('🍿', style: TextStyle(fontSize: 18)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                rewards.balance >= 10
+                                    ? 'Assistir esta sessão sem anúncios (-10 Pipocas)'
+                                    : 'Saldo: ${rewards.balance} Pipocas. Toque para ganhar mais!',
+                                style: GoogleFonts.inter(
+                                  color: rewards.balance >= 10 ? const Color(0xFF00D4FF) : Colors.white70,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right, color: Colors.white54, size: 18),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
 
                 // Synopsis (Glassmorphism)
                 ClipRRect(

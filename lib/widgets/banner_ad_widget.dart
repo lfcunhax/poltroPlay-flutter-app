@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:poltro_play/core/constants/app_constants.dart';
-// For self-contained execution, AdService is mocked here or assumed to provide basic setup.
+import 'package:poltro_play/providers/rewards_provider.dart';
 
-class BannerAdWidget extends StatefulWidget {
+class BannerAdWidget extends ConsumerStatefulWidget {
   final String? adUnitId;
 
   const BannerAdWidget({
@@ -12,10 +13,10 @@ class BannerAdWidget extends StatefulWidget {
   });
 
   @override
-  State<BannerAdWidget> createState() => _BannerAdWidgetState();
+  ConsumerState<BannerAdWidget> createState() => _BannerAdWidgetState();
 }
 
-class _BannerAdWidgetState extends State<BannerAdWidget> {
+class _BannerAdWidgetState extends ConsumerState<BannerAdWidget> {
   BannerAd? _bannerAd;
   bool _isLoaded = false;
 
@@ -56,6 +57,11 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final rewardsState = ref.watch(rewardsProvider);
+    if (rewardsState.isAdFreeActive) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       height: 50,
       width: double.infinity,
@@ -63,7 +69,8 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
       alignment: Alignment.center,
       child: _isLoaded && _bannerAd != null
           ? AdWidget(ad: _bannerAd!)
-          : const SizedBox(), // Mantém o espaço reservado mesmo se falhar
+          : const SizedBox(),
     );
   }
 }
+
