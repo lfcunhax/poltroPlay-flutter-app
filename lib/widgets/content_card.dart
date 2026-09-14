@@ -64,18 +64,18 @@ class ContentCard extends StatelessWidget {
                         imageUrl: imageUrl,
                         fit: BoxFit.cover,
                         cacheManager: _movieImageCacheManager,
-                        memCacheWidth: (width * 2).toInt(), // Otimização crítica de performance
-                        fadeInDuration: const Duration(milliseconds: 250),
+                        memCacheWidth: 350,
+                        memCacheHeight: 525,
+                        maxWidthDiskCache: 600,
+                        maxHeightDiskCache: 900,
+                        fadeInDuration: const Duration(milliseconds: 200),
                         placeholder: (context, url) => Container(
                           color: const Color(0xFF161326),
                           child: const Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                color: Color(0xFF7B2FF7),
-                                strokeWidth: 2,
-                              ),
+                            child: Icon(
+                              Icons.movie_creation_outlined,
+                              color: Color(0x337B2FF7),
+                              size: 32,
                             ),
                           ),
                         ),

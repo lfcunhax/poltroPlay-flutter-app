@@ -53,9 +53,16 @@ class HomeScreen extends ConsumerWidget {
                   items: items.take(10).toList(),
                   onItemTap: (item) async {
                     if (item is Promotion) {
-                      final url = Uri.parse(item.targetUrl);
-                      if (await canLaunchUrl(url)) {
-                        await launchUrl(url, mode: LaunchMode.externalApplication);
+                      if (item.contentId != null && item.contentId!.isNotEmpty) {
+                        final type = item.contentType ?? 'movie';
+                        context.push('/detail/${item.contentId}', extra: {'type': type});
+                        return;
+                      }
+                      if (item.targetUrl.isNotEmpty) {
+                        final url = Uri.parse(item.targetUrl);
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(url, mode: LaunchMode.externalApplication);
+                        }
                       }
                     } else {
                       final type = item is Movie ? 'movie' : 'tv';

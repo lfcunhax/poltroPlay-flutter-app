@@ -7,9 +7,11 @@ import 'package:poltro_play/models/series.dart';
 import 'package:poltro_play/models/cast.dart';
 import 'package:poltro_play/models/video.dart';
 import 'package:poltro_play/models/episode.dart';
+import 'package:poltro_play/models/promotion.dart';
 import 'package:poltro_play/core/services/tmdb_service.dart';
 import 'package:poltro_play/core/utils/string_utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 final firestoreServiceProvider = Provider<FirestoreService>((ref) {
   return FirestoreService();
@@ -217,6 +219,126 @@ final paginatedSeriesProvider = StateNotifierProvider<SeriesNotifier, PaginatedS
   return SeriesNotifier(api);
 });
 
+// ──────────────────────────────────────────────────────────
+// NOTIFIERS PAGINADOS POR CATEGORIA / TAG
+// ──────────────────────────────────────────────────────────
+
+class CategoryMoviesNotifier extends StateNotifier<PaginatedState<Movie>> {
+  final MovieApiService _api;
+  final String tag;
+
+  CategoryMoviesNotifier(this._api, this.tag) : super(const PaginatedState<Movie>()) {
+    loadInitial();
+  }
+
+  Future<void> loadInitial() async {
+    if (state.isLoading) return;
+    state = state.copyWith(isLoading: true, currentPage: 1);
+
+    try {
+      final movies = await _api.getMoviesByTag(tag, page: 1);
+      state = PaginatedState<Movie>(
+        items: movies,
+        isLoading: false,
+        hasMore: movies.length >= 20,
+        currentPage: 1,
+      );
+    } catch (_) {
+      state = state.copyWith(isLoading: false);
+    }
+  }
+
+  Future<void> loadMore() async {
+    if (state.isLoading || !state.hasMore) return;
+    state = state.copyWith(isLoading: true);
+
+    try {
+      final nextPage = state.currentPage + 1;
+      final newMovies = await _api.getMoviesByTag(tag, page: nextPage);
+
+      final existingIds = state.items.map((m) => m.id).toSet();
+      final uniqueNew = newMovies.where((m) => !existingIds.contains(m.id)).toList();
+
+      state = state.copyWith(
+        items: [...state.items, ...uniqueNew],
+        isLoading: false,
+        hasMore: newMovies.length >= 20,
+        currentPage: nextPage,
+      );
+    } catch (_) {
+      state = state.copyWith(isLoading: false);
+    }
+  }
+
+  Future<void> refresh() async {
+    state = const PaginatedState<Movie>();
+    await loadInitial();
+  }
+}
+
+class CategorySeriesNotifier extends StateNotifier<PaginatedState<Series>> {
+  final SeriesApiService _api;
+  final String tag;
+
+  CategorySeriesNotifier(this._api, this.tag) : super(const PaginatedState<Series>()) {
+    loadInitial();
+  }
+
+  Future<void> loadInitial() async {
+    if (state.isLoading) return;
+    state = state.copyWith(isLoading: true, currentPage: 1);
+
+    try {
+      final series = await _api.getSeriesByTag(tag, page: 1);
+      state = PaginatedState<Series>(
+        items: series,
+        isLoading: false,
+        hasMore: series.length >= 20,
+        currentPage: 1,
+      );
+    } catch (_) {
+      state = state.copyWith(isLoading: false);
+    }
+  }
+
+  Future<void> loadMore() async {
+    if (state.isLoading || !state.hasMore) return;
+    state = state.copyWith(isLoading: true);
+
+    try {
+      final nextPage = state.currentPage + 1;
+      final newSeries = await _api.getSeriesByTag(tag, page: nextPage);
+
+      final existingIds = state.items.map((s) => s.id).toSet();
+      final uniqueNew = newSeries.where((s) => !existingIds.contains(s.id)).toList();
+
+      state = state.copyWith(
+        items: [...state.items, ...uniqueNew],
+        isLoading: false,
+        hasMore: newSeries.length >= 20,
+        currentPage: nextPage,
+      );
+    } catch (_) {
+      state = state.copyWith(isLoading: false);
+    }
+  }
+
+  Future<void> refresh() async {
+    state = const PaginatedState<Series>();
+    await loadInitial();
+  }
+}
+
+final categoryMoviesProvider = StateNotifierProvider.family<CategoryMoviesNotifier, PaginatedState<Movie>, String>((ref, tag) {
+  final api = ref.watch(movieApiServiceProvider);
+  return CategoryMoviesNotifier(api, tag);
+});
+
+final categorySeriesProvider = StateNotifierProvider.family<CategorySeriesNotifier, PaginatedState<Series>, String>((ref, tag) {
+  final api = ref.watch(seriesApiServiceProvider);
+  return CategorySeriesNotifier(api, tag);
+});
+
 // --- PROVIDERS EXISTENTES (para home_screen e outras telas) ---
 
 final trendingMoviesProvider = FutureProvider<List<Movie>>((ref) async {
@@ -232,15 +354,36 @@ final highlightsProvider = FutureProvider<List<dynamic>>((ref) async {
   final seriesApi = ref.watch(seriesApiServiceProvider);
   final firestoreService = ref.watch(firestoreServiceProvider);
 
+  // 1. Busca promoções e anúncios ativos do Firestore (sempre com prioridade no carrossel)
+  List<dynamic> activePromos = [];
+  try {
+    final promoSnap = await FirebaseFirestore.instance
+        .collection('promotions')
+        .where('isActive', isEqualTo: true)
+        .get();
+    activePromos = promoSnap.docs.map((doc) => Promotion.fromFirestore(doc)).toList();
+  } catch (e) {
+    if (kDebugMode) print('Erro ao buscar promoções para carrossel: $e');
+  }
+
+  // 2. Busca destaques de filmes e séries da API PostgreSQL
+  List<dynamic> apiHighlights = [];
   try {
     final movieHighlights = await movieApi.getHighlights();
     final seriesHighlights = await seriesApi.getHighlights();
-    final combined = [...movieHighlights, ...seriesHighlights];
-    if (combined.isNotEmpty) {
-      combined.shuffle();
-      return combined;
+    apiHighlights = [...movieHighlights, ...seriesHighlights];
+    if (apiHighlights.isNotEmpty) {
+      apiHighlights.shuffle();
     }
-  } catch (_) {}
+  } catch (e) {
+    if (kDebugMode) print('Erro ao buscar destaques da API: $e');
+  }
+
+  // Combina as promoções (na frente) com os destaques da API
+  final combined = [...activePromos, ...apiHighlights];
+  if (combined.isNotEmpty) {
+    return combined;
+  }
 
   return firestoreService.getHighlights();
 });

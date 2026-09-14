@@ -7,6 +7,9 @@ class Promotion {
   final String targetUrl;
   final bool isActive;
   final DateTime? createdAt;
+  final String? contentId;
+  final String? contentType; // 'movie' ou 'tv'
+  final String? type; // 'movie', 'series', 'product', 'custom'
 
   Promotion({
     required this.id,
@@ -15,6 +18,9 @@ class Promotion {
     required this.targetUrl,
     required this.isActive,
     this.createdAt,
+    this.contentId,
+    this.contentType,
+    this.type,
   });
 
   factory Promotion.fromFirestore(DocumentSnapshot doc) {
@@ -26,6 +32,9 @@ class Promotion {
       targetUrl: data['targetUrl'] ?? '',
       isActive: data['isActive'] ?? false,
       createdAt: data['createdAt'] != null ? (data['createdAt'] as Timestamp).toDate() : null,
+      contentId: data['contentId']?.toString(),
+      contentType: data['contentType']?.toString(),
+      type: data['type']?.toString(),
     );
   }
 
@@ -36,6 +45,9 @@ class Promotion {
       'targetUrl': targetUrl,
       'isActive': isActive,
       'createdAt': createdAt,
+      'contentId': contentId,
+      'contentType': contentType,
+      'type': type,
     };
   }
 }

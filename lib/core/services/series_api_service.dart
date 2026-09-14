@@ -166,18 +166,41 @@ class SeriesApiService {
     return _allSeriesMemoryCache ?? [];
   }
 
-  /// Retorna séries filtradas por tag/gênero com normalização de texto
-  Future<List<Series>> getSeriesByTag(String tag) async {
-    final cleanTag = normalizeSearchText(tag.trim());
+  /// Retorna séries filtradas por tag/gênero com paginação direta da API REST
+  Future<List<Series>> getSeriesByTag(String tag, {int page = 1}) async {
+    final cleanTag = tag.trim();
     if (cleanTag.isEmpty) return [];
 
-    final all = await getAllSeries();
-    return all.where((s) {
-      return s.tags.any((t) {
-        final norm = normalizeSearchText(t);
-        return norm.contains(cleanTag) || cleanTag.contains(norm);
-      });
-    }).toList();
+    try {
+      final uri = Uri.parse(
+          '$_baseUrl/series?page=$page&limit=$_pageSize&tag=${Uri.encodeComponent(cleanTag)}');
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List list = data['series'] ?? [];
+        final parsed = list.map((j) => Series.fromApi(j)).toList();
+        if (parsed.isNotEmpty) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      print('SeriesApiService.getSeriesByTag network error: $e');
+    }
+
+    // Fallback: se for página 1 e a API falhar ou não encontrar por tag exata, busca no cache local
+    if (page == 1) {
+      final normTag = normalizeSearchText(cleanTag);
+      final all = await getAllSeries();
+      return all.where((s) {
+        return s.tags.any((t) {
+          final norm = normalizeSearchText(t);
+          return norm.contains(normTag) || normTag.contains(norm);
+        });
+      }).toList();
+    }
+
+    return [];
   }
 
   /// Busca séries pelo nome com suporte a tolerância a acentos e termos parciais

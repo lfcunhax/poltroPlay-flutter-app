@@ -95,34 +95,16 @@ class FavoritesScreen extends ConsumerWidget {
               onSelected: (value) {
                 if (value == 'clear') {
                   _confirmClearAll(context, ref);
-                } else if (value == 'fix_dragon') {
-                  ref.read(favoritesProvider.notifier).removeStubbornFavorite('drag');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Removendo itens duplicados...'),
-                      backgroundColor: Color(0xFF1A1A2E),
-                    ),
-                  );
                 }
               },
               itemBuilder: (ctx) => [
-                PopupMenuItem(
-                  value: 'fix_dragon',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.auto_fix_high_rounded, color: Color(0xFF00D4FF), size: 20),
-                      const SizedBox(width: 10),
-                      Text('Limpar "Casa do Dragão"', style: GoogleFonts.inter(color: Colors.white, fontSize: 13)),
-                    ],
-                  ),
-                ),
                 PopupMenuItem(
                   value: 'clear',
                   child: Row(
                     children: [
                       const Icon(Icons.delete_sweep_rounded, color: Color(0xFFE94560), size: 20),
                       const SizedBox(width: 10),
-                      Text('Limpar todos', style: GoogleFonts.inter(color: const Color(0xFFE94560), fontSize: 13)),
+                      Text('Limpar todos', style: GoogleFonts.inter(color: const Color(0xFFE94560), fontSize: 13, fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),

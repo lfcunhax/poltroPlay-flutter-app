@@ -48,9 +48,15 @@ class _ContentCarouselState extends State<ContentCarousel> {
             if (isPromo) {
               imageUrl = item.imageUrl;
               title = item.title;
-              overview = 'Patrocinado';
-              buttonText = 'Acessar';
-              buttonIcon = Icons.open_in_new;
+              if (item.contentId != null && item.contentId!.isNotEmpty) {
+                overview = item.contentType == 'tv' ? 'Série em Destaque' : 'Filme em Destaque';
+                buttonText = 'Assistir';
+                buttonIcon = Icons.play_arrow;
+              } else {
+                overview = item.type == 'product' ? 'Patrocinado' : 'Destaque Especial';
+                buttonText = 'Acessar';
+                buttonIcon = Icons.open_in_new;
+              }
             } else {
               final String? backdropPath = item.backdropPath;
               imageUrl = backdropPath != null && backdropPath.isNotEmpty 
