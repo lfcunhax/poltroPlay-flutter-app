@@ -3,6 +3,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart' as cache;
 
+import 'package:poltro_play/widgets/cinematic_poster_placeholder.dart';
+
 class ContentCard extends StatelessWidget {
   final String imageUrl;
   final String title;
@@ -56,24 +58,29 @@ class ContentCard extends StatelessWidget {
             children: [
               Hero(
                 tag: tag,
-                child: CachedNetworkImage(
-                  imageUrl: imageUrl,
-                  fit: BoxFit.cover,
-                  cacheManager: _movieImageCacheManager,
-                  memCacheWidth: (width * 2).toInt(), // Otimização crítica de performance
-                  placeholder: (context, url) => Container(
-                    color: const Color(0xFF1A1A2E),
-                    child: const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFF7B2FF7),
+                child: imageUrl.trim().isEmpty
+                    ? CinematicPosterPlaceholder(title: title)
+                    : CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        cacheManager: _movieImageCacheManager,
+                        memCacheWidth: (width * 2).toInt(), // Otimização crítica de performance
+                        fadeInDuration: const Duration(milliseconds: 250),
+                        placeholder: (context, url) => Container(
+                          color: const Color(0xFF161326),
+                          child: const Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF7B2FF7),
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => CinematicPosterPlaceholder(title: title),
                       ),
-                    ),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    color: const Color(0xFF1A1A2E),
-                    child: const Icon(Icons.error, color: Colors.white),
-                  ),
-                ),
               ),
               Container(
                 decoration: BoxDecoration(

@@ -91,15 +91,21 @@ class Movie {
   }
 
   String get fullPosterUrl {
-    if (posterPath == null) return 'https://via.placeholder.com/500x750.png?text=No+Poster';
-    if (posterPath!.startsWith('http')) return posterPath!;
-    return '${AppConstants.imageBaseUrlW500}$posterPath';
+    if (posterPath == null) return '';
+    final trimmed = posterPath!.trim();
+    if (trimmed.isEmpty || trimmed == 'null') return '';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    final path = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+    return '${AppConstants.imageBaseUrlW500}$path';
   }
 
   String get fullBackdropUrl {
-    if (backdropPath == null) return 'https://via.placeholder.com/1280x720.png?text=No+Backdrop';
-    if (backdropPath!.startsWith('http')) return backdropPath!;
-    return '${AppConstants.imageBaseUrlW1280}$backdropPath';
+    if (backdropPath == null) return '';
+    final trimmed = backdropPath!.trim();
+    if (trimmed.isEmpty || trimmed == 'null') return '';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    final path = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+    return '${AppConstants.imageBaseUrlW1280}$path';
   }
 
   String get year {

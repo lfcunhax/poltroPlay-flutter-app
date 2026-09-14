@@ -53,6 +53,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   void _onItemTapped(int index, BuildContext context) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     switch (index) {
       case 0:
         context.go('/home');
@@ -177,102 +178,173 @@ class _MainShellState extends ConsumerState<MainShell> {
           const SizedBox(height: 90), // Offset for the translucent bottom nav bar
         ],
       ),
-      bottomNavigationBar: Theme(
-        data: Theme.of(context).copyWith(
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-        ),
+      bottomNavigationBar: _buildFloatingBottomBar(currentIndex),
+    ),
+    );
+  }
+
+  Widget _buildFloatingBottomBar(int currentIndex) {
+    const navItems = [
+      _NavItemData(icon: Icons.home_rounded, label: 'Home'),
+      _NavItemData(icon: Icons.tv_rounded, label: 'Séries'),
+      _NavItemData(icon: Icons.movie_rounded, label: 'Filmes'),
+      _NavItemData(icon: Icons.category_rounded, label: 'Categorias'),
+      _NavItemData(icon: Icons.favorite_rounded, label: 'Favoritos'),
+    ];
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
         child: Container(
+          height: 66,
           decoration: BoxDecoration(
-            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(30),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF7B2FF7).withValues(alpha: 0.15),
-                blurRadius: 20,
-                offset: const Offset(0, -5),
+                color: Colors.black.withValues(alpha: 0.65),
+                blurRadius: 28,
+                offset: const Offset(0, 10),
+              ),
+              BoxShadow(
+                color: const Color(0xFF7B2FF7).withValues(alpha: 0.25),
+                blurRadius: 22,
+                spreadRadius: 1,
               ),
             ],
           ),
           child: ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            borderRadius: BorderRadius.circular(30),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A2E).withValues(alpha: 0.6), // Translucent dark
-                  border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFF1F183D).withValues(alpha: 0.88),
+                      const Color(0xFF100D24).withValues(alpha: 0.92),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    width: 1.2,
+                  ),
                 ),
-                child: BottomNavigationBar(
-                  backgroundColor: Colors.transparent,
-                  type: BottomNavigationBarType.fixed,
-                  elevation: 0,
-                  currentIndex: currentIndex,
-                  onTap: (index) => _onItemTapped(index, context),
-                  selectedItemColor: const Color(0xFF00D4FF),
-                  unselectedItemColor: Colors.white54,
-                  selectedLabelStyle: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  unselectedLabelStyle: GoogleFonts.inter(
-                    fontSize: 12,
-                  ),
-                  items: const [
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.home_rounded),
-                      activeIcon: _GlowIcon(Icons.home_rounded),
-                      label: 'Home',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.tv_rounded),
-                      activeIcon: _GlowIcon(Icons.tv_rounded),
-                      label: 'Séries',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.movie_rounded),
-                      activeIcon: _GlowIcon(Icons.movie_rounded),
-                      label: 'Filmes',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.category_rounded),
-                      activeIcon: _GlowIcon(Icons.category_rounded),
-                      label: 'Categorias',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.favorite_rounded),
-                      activeIcon: _GlowIcon(Icons.favorite_rounded),
-                      label: 'Favoritos',
-                    ),
-                  ],
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: List.generate(navItems.length, (index) {
+                    final item = navItems[index];
+                    final isSelected = currentIndex == index;
+
+                    return _FloatingNavItem(
+                      data: item,
+                      isSelected: isSelected,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        _onItemTapped(index, context);
+                      },
+                    );
+                  }),
                 ),
               ),
             ),
           ),
         ),
       ),
-    ),
     );
   }
 }
 
-class _GlowIcon extends StatelessWidget {
+class _NavItemData {
   final IconData icon;
-  
-  const _GlowIcon(this.icon);
+  final String label;
+
+  const _NavItemData({required this.icon, required this.label});
+}
+
+class _FloatingNavItem extends StatelessWidget {
+  final _NavItemData data;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _FloatingNavItem({
+    required this.data,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF00D4FF).withValues(alpha: 0.5),
-            blurRadius: 12,
-            spreadRadius: 2,
-          ),
-        ],
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        padding: EdgeInsets.symmetric(
+          horizontal: isSelected ? 12 : 8,
+          vertical: 6,
+        ),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: isSelected
+              ? LinearGradient(
+                  colors: [
+                    const Color(0xFF7B2FF7).withValues(alpha: 0.38),
+                    const Color(0xFF00D4FF).withValues(alpha: 0.18),
+                  ],
+                )
+              : null,
+          border: isSelected
+              ? Border.all(
+                  color: const Color(0xFF00D4FF).withValues(alpha: 0.5),
+                  width: 1,
+                )
+              : null,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF00D4FF).withValues(alpha: 0.25),
+                    blurRadius: 10,
+                    spreadRadius: 0.5,
+                  ),
+                ]
+              : null,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedScale(
+              scale: isSelected ? 1.15 : 1.0,
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutBack,
+              child: Icon(
+                data.icon,
+                size: 22,
+                color: isSelected ? const Color(0xFF00D4FF) : Colors.white54,
+              ),
+            ),
+            const SizedBox(height: 3),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 220),
+              style: GoogleFonts.outfit(
+                fontSize: 10.5,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? Colors.white : Colors.white54,
+                letterSpacing: 0.2,
+              ),
+              child: Text(
+                data.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
-      child: Icon(icon, color: const Color(0xFF00D4FF)),
     );
   }
 }

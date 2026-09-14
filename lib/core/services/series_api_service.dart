@@ -166,6 +166,20 @@ class SeriesApiService {
     return _allSeriesMemoryCache ?? [];
   }
 
+  /// Retorna séries filtradas por tag/gênero com normalização de texto
+  Future<List<Series>> getSeriesByTag(String tag) async {
+    final cleanTag = normalizeSearchText(tag.trim());
+    if (cleanTag.isEmpty) return [];
+
+    final all = await getAllSeries();
+    return all.where((s) {
+      return s.tags.any((t) {
+        final norm = normalizeSearchText(t);
+        return norm.contains(cleanTag) || cleanTag.contains(norm);
+      });
+    }).toList();
+  }
+
   /// Busca séries pelo nome com suporte a tolerância a acentos e termos parciais
   Future<List<Series>> searchSeries(String query) async {
     final cleanQuery = query.trim();

@@ -77,7 +77,8 @@ class DetailScreen extends ConsumerWidget {
             : '');
     final String videoUrl = (detail is Movie) ? (detail.videoUrl ?? AppConstants.sampleVideoUrl) : ((detail as Series).videoUrl ?? AppConstants.sampleVideoUrl);
 
-    final isFavorite = ref.watch(favoritesProvider).any((e) => e.id == detail.id);
+    final favoritesList = ref.watch(favoritesProvider);
+    final isFavorite = favoritesList.any((e) => e.id.toString().trim() == detail.id.toString().trim());
 
     return CustomScrollView(
       slivers: [

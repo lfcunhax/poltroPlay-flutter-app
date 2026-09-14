@@ -26,6 +26,7 @@ class HomeScreen extends ConsumerWidget {
     final popularSeries = ref.watch(popularSeriesProvider);
     final topRatedMovies = ref.watch(topRatedMoviesProvider);
     final nowPlaying = ref.watch(nowPlayingMoviesProvider);
+    final newlyAdded = ref.watch(newlyAddedMoviesProvider);
     final watchProgressList = ref.watch(watchProgressListProvider);
 
     return Scaffold(
@@ -39,6 +40,7 @@ class HomeScreen extends ConsumerWidget {
           ref.invalidate(popularSeriesProvider);
           ref.invalidate(topRatedMoviesProvider);
           ref.invalidate(nowPlayingMoviesProvider);
+          ref.invalidate(newlyAddedMoviesProvider);
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -170,13 +172,22 @@ class HomeScreen extends ConsumerWidget {
                 sectionId: 'top_rated',
               ),
 
-              // Now Playing
+              // Lançamentos verificados por ano de lançamento
               _buildContentSection(
                 context: context,
                 title: 'Lançamentos',
                 asyncValue: nowPlaying,
                 mediaType: 'movie',
                 sectionId: 'now_playing',
+              ),
+
+              // Adicionados Recentemente ao Catálogo
+              _buildContentSection(
+                context: context,
+                title: 'Adicionados Recentemente',
+                asyncValue: newlyAdded,
+                mediaType: 'movie',
+                sectionId: 'newly_added',
               ),
 
               const SizedBox(height: 32),

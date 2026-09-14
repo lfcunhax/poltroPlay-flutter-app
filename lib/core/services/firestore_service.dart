@@ -361,20 +361,77 @@ class FirestoreService {
     try {
       final isMovie = item is Movie;
       final type = isMovie ? 'movie' : 'series';
-      final data = item.toJson();
+      final data = Map<String, dynamic>.from(item.toJson());
       data['contentType'] = type;
+      data['id'] = item.id.toString();
 
-      await _db.collection('users').doc(uid).collection('favorites').doc(item.id).set(data);
+      final docId = item.id.toString().trim().isNotEmpty ? item.id.toString() : 'fav_${DateTime.now().millisecondsSinceEpoch}';
+      await _db.collection('users').doc(uid).collection('favorites').doc(docId).set(data, SetOptions(merge: true));
     } catch (e) {
       print("Error syncing favorite: $e");
     }
   }
 
-  Future<void> removeFavorite(String uid, String contentId) async {
+  Future<void> removeFavorite(String uid, String contentId, {String? title}) async {
     try {
-      await _db.collection('users').doc(uid).collection('favorites').doc(contentId).delete();
+      final favCol = _db.collection('users').doc(uid).collection('favorites');
+
+      // 1. Tenta deletar diretamente pelo ID informado
+      if (contentId.isNotEmpty) {
+        await favCol.doc(contentId).delete();
+
+        // 2. Busca e remove por query de ID caso o docId seja diferente do campo id
+        final snapById = await favCol.where('id', isEqualTo: contentId).get();
+        for (final doc in snapById.docs) {
+          await doc.reference.delete();
+        }
+
+        // Tenta também se for número
+        final intId = int.tryParse(contentId);
+        if (intId != null) {
+          final snapByInt = await favCol.where('id', isEqualTo: intId).get();
+          for (final doc in snapByInt.docs) {
+            await doc.reference.delete();
+          }
+          final snapByTmdb = await favCol.where('tmdbId', isEqualTo: intId).get();
+          for (final doc in snapByTmdb.docs) {
+            await doc.reference.delete();
+          }
+        }
+      }
+
+      // 3. Se title informado, ou se for algo como "dragão" / "dragon", busca e apaga
+      if (title != null && title.trim().isNotEmpty) {
+        final normTitle = normalizeSearchText(title);
+        final allDocs = await favCol.get();
+        for (final doc in allDocs.docs) {
+          final data = doc.data();
+          final docTitle = normalizeSearchText((data['title'] ?? data['name'] ?? '').toString());
+          if (docTitle == normTitle || (normTitle.contains('drag') && docTitle.contains('drag'))) {
+            await doc.reference.delete();
+          }
+        }
+      }
     } catch (e) {
       print("Error removing favorite: $e");
+    }
+  }
+
+  Future<void> forceRemoveFavoritesMatching(String uid, String query) async {
+    try {
+      final favCol = _db.collection('users').doc(uid).collection('favorites');
+      final allDocs = await favCol.get();
+      final normQuery = normalizeSearchText(query);
+      for (final doc in allDocs.docs) {
+        final data = doc.data();
+        final docTitle = normalizeSearchText((data['title'] ?? data['name'] ?? '').toString());
+        final docId = doc.id.toLowerCase();
+        if (docTitle.contains(normQuery) || docId.contains(normQuery)) {
+          await doc.reference.delete();
+        }
+      }
+    } catch (e) {
+      print("Error force removing matching favorites: $e");
     }
   }
 
@@ -382,7 +439,15 @@ class FirestoreService {
     try {
       final snapshot = await _db.collection('users').doc(uid).collection('favorites').get();
       return snapshot.docs.map((doc) {
-        final data = doc.data();
+        final data = Map<String, dynamic>.from(doc.data());
+        // Garante que o campo 'id' SEMPRE esteja preenchido com o doc.id como fallback
+        final rawId = data['id']?.toString() ?? '';
+        if (rawId.trim().isEmpty) {
+          data['id'] = doc.id;
+        } else {
+          data['id'] = rawId;
+        }
+
         if (data['contentType'] == 'series') {
           return Series.fromJson(data);
         } else {

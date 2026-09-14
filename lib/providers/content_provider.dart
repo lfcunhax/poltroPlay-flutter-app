@@ -279,12 +279,41 @@ final topRatedSeriesProvider = FutureProvider<List<Series>>((ref) async {
   return api.getSeries(page: 1);
 });
 
+/// Filmes que são de fato LANÇAMENTOS (verificados pelo ano de lançamento real releaseDate >= 2024)
 final nowPlayingMoviesProvider = FutureProvider<List<Movie>>((ref) async {
   final movieApi = ref.watch(movieApiServiceProvider);
   final movies = await movieApi.getMovies(page: 1);
-  if (movies.isNotEmpty) return movies;
-  final service = ref.watch(firestoreServiceProvider);
-  return service.getNowPlayingMovies();
+
+  final currentYear = DateTime.now().year;
+  final minYear = currentYear - 2; // 2024 em diante
+
+  final genuineReleases = movies.where((m) {
+    final year = int.tryParse(m.year);
+    return year != null && year >= minYear;
+  }).toList();
+
+  // Ordena por data de lançamento mais recente primeiro
+  genuineReleases.sort((a, b) {
+    final dA = a.releaseDate ?? '';
+    final dB = b.releaseDate ?? '';
+    return dB.compareTo(dA);
+  });
+
+  if (genuineReleases.isNotEmpty) return genuineReleases;
+
+  // Fallback: se na página 1 tiver poucos, ordena todo o catálogo por ano decrescente
+  final sorted = [...movies]..sort((a, b) {
+    final yA = int.tryParse(a.year) ?? 0;
+    final yB = int.tryParse(b.year) ?? 0;
+    return yB.compareTo(yA);
+  });
+  return sorted;
+});
+
+/// Filmes adicionados recentemente no catálogo da plataforma
+final newlyAddedMoviesProvider = FutureProvider<List<Movie>>((ref) async {
+  final movieApi = ref.watch(movieApiServiceProvider);
+  return movieApi.getMovies(page: 1);
 });
 
 final movieDetailProvider = FutureProvider.family<Movie, String>((ref, id) async {
@@ -405,15 +434,86 @@ final suggestionsProvider = FutureProvider<List<dynamic>>((ref) async {
   return combined;
 });
 
-// CATEGORIES FROM FIRESTORE
+// CATEGORIES DINÂMICAS (Unificando Firestore, API e Catálogo)
 final categoriesProvider = FutureProvider<List<String>>((ref) async {
-  final service = ref.watch(firestoreServiceProvider);
-  return service.getCategories();
+  final firestoreService = ref.watch(firestoreServiceProvider);
+  final seriesApiService = ref.watch(seriesApiServiceProvider);
+
+  final categorySet = <String>{
+    'Ação',
+    'Aventura',
+    'Animação',
+    'Comédia',
+    'Crime',
+    'Documentário',
+    'Drama',
+    'Família',
+    'Fantasia',
+    'Ficção Científica',
+    'Guerra',
+    'Kids',
+    'Mistério',
+    'Música',
+    'Romance',
+    'Suspense',
+    'Terror',
+  };
+
+  try {
+    final firestoreCategories = await firestoreService.getCategories();
+    for (final c in firestoreCategories) {
+      if (c.trim().isNotEmpty) categorySet.add(c.trim());
+    }
+  } catch (_) {}
+
+  try {
+    final series = await seriesApiService.getAllSeries();
+    for (final s in series) {
+      for (final tag in s.tags) {
+        final clean = tag.trim();
+        if (clean.isNotEmpty && !clean.toLowerCase().contains('sci-fi & fantasy')) {
+          categorySet.add(clean);
+        }
+      }
+    }
+  } catch (_) {}
+
+  final list = categorySet.toList();
+  list.sort((a, b) => a.compareTo(b));
+  return list;
 });
 
 final contentByTagProvider = FutureProvider.family<List<dynamic>, String>((ref, tag) async {
-  final service = ref.watch(firestoreServiceProvider);
-  return service.getContentByTag(tag);
+  final firestoreService = ref.watch(firestoreServiceProvider);
+  final movieApiService = ref.watch(movieApiServiceProvider);
+  final seriesApiService = ref.watch(seriesApiServiceProvider);
+
+  final List<dynamic> results = [];
+  final Set<String> seenIds = {};
+
+  try {
+    final apiMovies = await movieApiService.getMoviesByTag(tag);
+    for (final m in apiMovies) {
+      if (seenIds.add('m_${m.id}')) results.add(m);
+    }
+  } catch (_) {}
+
+  try {
+    final apiSeries = await seriesApiService.getSeriesByTag(tag);
+    for (final s in apiSeries) {
+      if (seenIds.add('s_${s.id}')) results.add(s);
+    }
+  } catch (_) {}
+
+  try {
+    final firestoreItems = await firestoreService.getContentByTag(tag);
+    for (final item in firestoreItems) {
+      final key = item is Movie ? 'm_${item.id}' : 's_${item.id}';
+      if (seenIds.add(key)) results.add(item);
+    }
+  } catch (_) {}
+
+  return results;
 });
 
 final movieGenresProvider = FutureProvider<List<dynamic>>((ref) async {

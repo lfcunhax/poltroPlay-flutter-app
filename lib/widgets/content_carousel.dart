@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:poltro_play/models/movie.dart';
 import 'package:poltro_play/models/series.dart';
 import 'package:poltro_play/models/promotion.dart';
+import 'package:poltro_play/widgets/cinematic_poster_placeholder.dart';
 
 class ContentCarousel extends StatefulWidget {
   final List<dynamic> items; // Can be a strongly typed model in real usage
@@ -79,22 +80,27 @@ class _ContentCarouselState extends State<ContentCarousel> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          color: const Color(0xFF1A1A2E),
-                          child: const Center(
-                            child: CircularProgressIndicator(
-                              color: Color(0xFF7B2FF7),
+                      imageUrl.trim().isEmpty
+                          ? CinematicPosterPlaceholder(title: title)
+                          : CachedNetworkImage(
+                              imageUrl: imageUrl,
+                              fit: BoxFit.cover,
+                              fadeInDuration: const Duration(milliseconds: 250),
+                              placeholder: (context, url) => Container(
+                                color: const Color(0xFF161326),
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 32,
+                                    height: 32,
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFF7B2FF7),
+                                      strokeWidth: 2.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (context, url, error) => CinematicPosterPlaceholder(title: title),
                             ),
-                          ),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          color: const Color(0xFF1A1A2E),
-                          child: const Icon(Icons.error, color: Colors.white),
-                        ),
-                      ),
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(

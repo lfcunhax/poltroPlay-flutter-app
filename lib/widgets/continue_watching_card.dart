@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:ui';
 import 'package:poltro_play/models/watch_progress.dart';
+import 'package:poltro_play/widgets/cinematic_poster_placeholder.dart';
 
 class ContinueWatchingCard extends StatelessWidget {
   final WatchProgress watchProgress;
@@ -59,19 +60,32 @@ class ContinueWatchingCard extends StatelessWidget {
                             borderRadius: const BorderRadius.only(
                               topLeft: Radius.circular(16),
                             ),
-                            child: CachedNetworkImage(
-                              imageUrl: watchProgress.fullPosterUrl,
-                              width: 60,
-                              height: 80,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                color: Colors.black26,
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                color: Colors.black26,
-                                child: const Icon(Icons.movie, color: Colors.white54),
-                              ),
-                            ),
+                            child: watchProgress.fullPosterUrl.trim().isEmpty
+                                ? const SizedBox(
+                                    width: 60,
+                                    height: 80,
+                                    child: CinematicPosterPlaceholder(
+                                      isCompact: true,
+                                      icon: Icons.play_arrow_rounded,
+                                    ),
+                                  )
+                                : CachedNetworkImage(
+                                    imageUrl: watchProgress.fullPosterUrl,
+                                    width: 60,
+                                    height: 80,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Container(
+                                      color: const Color(0xFF161326),
+                                    ),
+                                    errorWidget: (context, url, error) => const SizedBox(
+                                      width: 60,
+                                      height: 80,
+                                      child: CinematicPosterPlaceholder(
+                                        isCompact: true,
+                                        icon: Icons.play_arrow_rounded,
+                                      ),
+                                    ),
+                                  ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(

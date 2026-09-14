@@ -63,7 +63,12 @@ class WatchProgress {
     return '${minutes}m';
   }
 
-  String get fullPosterUrl => posterPath != null
-      ? '${AppConstants.imageBaseUrlW185}$posterPath'
-      : '';
+  String get fullPosterUrl {
+    if (posterPath == null) return '';
+    final trimmed = posterPath!.trim();
+    if (trimmed.isEmpty || trimmed == 'null') return '';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    final path = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+    return '${AppConstants.imageBaseUrlW185}$path';
+  }
 }
