@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:poltro_play/core/services/notification_service.dart';
+import 'package:poltro_play/core/services/rewards_service.dart';
 import 'package:poltro_play/providers/content_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -51,13 +52,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       try {
         // Dispara as requisições principais do Firestore em paralelo
         // Ao usar ref.read() nestes FutureProviders, o Riverpod inicia o fetch imediatamente
-        final futures = [
+        final results = await Future.wait([
           ref.read(highlightsProvider.future),
           ref.read(popularMoviesProvider.future),
           ref.read(popularSeriesProvider.future),
-        ];
-        
-        final results = await Future.wait(futures);
+        ]);
+        await RewardsService().syncWithFirestore();
         
         // Pega as imagens de destaque e já salva no cache de memória do celular
         // Assim, quando a home abrir, as imagens já estarão lá instantaneamente

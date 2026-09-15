@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:poltro_play/providers/auth_provider.dart';
+import 'package:poltro_play/core/services/rewards_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -22,7 +23,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final success = await authService.signInWithGoogle();
       
       if (success != null && mounted) {
-        context.go('/home');
+        // Garante que o saldo real da nuvem seja carregado antes de entrar na Home
+        await RewardsService().syncWithFirestore();
+        if (mounted) {
+          context.go('/home');
+        }
       }
     } catch (e) {
       if (mounted) {

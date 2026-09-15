@@ -48,12 +48,20 @@ class _ContentCarouselState extends State<ContentCarousel> {
             if (isPromo) {
               imageUrl = item.imageUrl;
               title = item.title;
-              if (item.contentId != null && item.contentId!.isNotEmpty) {
-                overview = item.contentType == 'tv' ? 'Série em Destaque' : 'Filme em Destaque';
+              overview = item.overview ?? '';
+              rating = item.rating ?? 0.0;
+              final isCatalogContent = item.contentId != null && item.contentId!.isNotEmpty;
+
+              if (isCatalogContent) {
+                if (overview.isEmpty) {
+                  overview = item.contentType == 'tv' ? 'Série em Destaque' : 'Filme em Destaque';
+                }
                 buttonText = 'Assistir';
                 buttonIcon = Icons.play_arrow;
               } else {
-                overview = item.type == 'product' ? 'Patrocinado' : 'Destaque Especial';
+                if (overview.isEmpty) {
+                  overview = item.type == 'product' ? 'Patrocinado' : 'Destaque Especial';
+                }
                 buttonText = 'Acessar';
                 buttonIcon = Icons.open_in_new;
               }
@@ -66,6 +74,9 @@ class _ContentCarouselState extends State<ContentCarousel> {
               overview = item.overview ?? '';
               rating = (item.voteAverage ?? 0.0) as double;
             }
+
+            final bool showRating = rating > 0;
+            final bool isSponsoredProduct = isPromo && (item.contentId == null || item.contentId!.isEmpty);
 
             return GestureDetector(
               onTap: () => widget.onItemTap(item),
@@ -129,7 +140,7 @@ class _ContentCarouselState extends State<ContentCarousel> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (!isPromo) ...[
+                            if (showRating) ...[
                               Row(
                                 children: [
                                   const Icon(
@@ -165,9 +176,9 @@ class _ContentCarouselState extends State<ContentCarousel> {
                               Text(
                                 overview,
                                 style: GoogleFonts.inter(
-                                  color: isPromo ? const Color(0xFF00D4FF) : Colors.white70,
+                                  color: isSponsoredProduct ? const Color(0xFF00D4FF) : Colors.white70,
                                   fontSize: 12,
-                                  fontWeight: isPromo ? FontWeight.bold : FontWeight.normal,
+                                  fontWeight: isSponsoredProduct ? FontWeight.bold : FontWeight.normal,
                                 ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,

@@ -10,6 +10,9 @@ class Promotion {
   final String? contentId;
   final String? contentType; // 'movie' ou 'tv'
   final String? type; // 'movie', 'series', 'product', 'custom'
+  final String? overview;
+  final double? rating;
+  final String? backdropPath;
 
   Promotion({
     required this.id,
@@ -21,6 +24,9 @@ class Promotion {
     this.contentId,
     this.contentType,
     this.type,
+    this.overview,
+    this.rating,
+    this.backdropPath,
   });
 
   factory Promotion.fromFirestore(DocumentSnapshot doc) {
@@ -35,6 +41,41 @@ class Promotion {
       contentId: data['contentId']?.toString(),
       contentType: data['contentType']?.toString(),
       type: data['type']?.toString(),
+      overview: data['overview']?.toString() ?? data['description']?.toString(),
+      rating: data['rating'] != null 
+          ? (data['rating'] as num).toDouble() 
+          : (data['voteAverage'] != null ? (data['voteAverage'] as num).toDouble() : null),
+      backdropPath: data['backdropPath']?.toString(),
+    );
+  }
+
+  Promotion copyWith({
+    String? id,
+    String? title,
+    String? imageUrl,
+    String? targetUrl,
+    bool? isActive,
+    DateTime? createdAt,
+    String? contentId,
+    String? contentType,
+    String? type,
+    String? overview,
+    double? rating,
+    String? backdropPath,
+  }) {
+    return Promotion(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      imageUrl: imageUrl ?? this.imageUrl,
+      targetUrl: targetUrl ?? this.targetUrl,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      contentId: contentId ?? this.contentId,
+      contentType: contentType ?? this.contentType,
+      type: type ?? this.type,
+      overview: overview ?? this.overview,
+      rating: rating ?? this.rating,
+      backdropPath: backdropPath ?? this.backdropPath,
     );
   }
 
@@ -48,6 +89,9 @@ class Promotion {
       'contentId': contentId,
       'contentType': contentType,
       'type': type,
+      'overview': overview,
+      'rating': rating,
+      'backdropPath': backdropPath,
     };
   }
 }

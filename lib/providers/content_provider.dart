@@ -354,19 +354,69 @@ final highlightsProvider = FutureProvider<List<dynamic>>((ref) async {
   final seriesApi = ref.watch(seriesApiServiceProvider);
   final firestoreService = ref.watch(firestoreServiceProvider);
 
-  // 1. Busca promoções e anúncios ativos do Firestore (sempre com prioridade no carrossel)
-  List<dynamic> activePromos = [];
+  // 1. Busca promoções e destaques ativos do Firestore configurados no Painel de Controle
+  List<Promotion> activePromos = [];
   try {
     final promoSnap = await FirebaseFirestore.instance
         .collection('promotions')
         .where('isActive', isEqualTo: true)
         .get();
-    activePromos = promoSnap.docs.map((doc) => Promotion.fromFirestore(doc)).toList();
+    final rawPromos = promoSnap.docs.map((doc) => Promotion.fromFirestore(doc)).toList();
+
+    // Enriquece os itens de catálogo com sinopse e nota caso não tenham sido salvos diretamente no Firestore
+    activePromos = await Future.wait(rawPromos.map((promo) async {
+      if (promo.contentId != null && promo.contentId!.isNotEmpty) {
+        final needsOverview = promo.overview == null || promo.overview!.isEmpty;
+        final needsRating = promo.rating == null || promo.rating == 0.0;
+        
+        if (needsOverview || needsRating) {
+          try {
+            if (promo.contentType == 'tv') {
+              final seriesId = int.tryParse(promo.contentId!) ?? 0;
+              final series = await seriesApi.getSeriesById(seriesId);
+              if (series != null) {
+                return promo.copyWith(
+                  overview: needsOverview ? series.overview : promo.overview,
+                  rating: needsRating ? series.voteAverage : promo.rating,
+                  backdropPath: promo.backdropPath ?? series.backdropPath,
+                );
+              }
+            } else {
+              final intId = int.tryParse(promo.contentId!);
+              Movie? movie;
+              if (intId != null) {
+                movie = await movieApi.getMovieById(intId);
+              }
+              if (movie == null) {
+                try {
+                  movie = await firestoreService.getMovieDetail(promo.contentId!);
+                } catch (_) {}
+              }
+              if (movie != null) {
+                return promo.copyWith(
+                  overview: needsOverview ? movie.overview : promo.overview,
+                  rating: needsRating ? movie.voteAverage : promo.rating,
+                  backdropPath: promo.backdropPath ?? movie.backdropPath,
+                );
+              }
+            }
+          } catch (e) {
+            if (kDebugMode) print('Erro ao enriquecer destaque ${promo.title}: $e');
+          }
+        }
+      }
+      return promo;
+    }));
   } catch (e) {
     if (kDebugMode) print('Erro ao buscar promoções para carrossel: $e');
   }
 
-  // 2. Busca destaques de filmes e séries da API PostgreSQL
+  // Se o painel de controle tiver destaques ativos, exibe EXATAMENTE o que o administrador definiu
+  if (activePromos.isNotEmpty) {
+    return activePromos;
+  }
+
+  // 2. Se o painel NÃO tiver nenhum destaque ativo cadastrado, busca destaques automáticos da API como fallback
   List<dynamic> apiHighlights = [];
   try {
     final movieHighlights = await movieApi.getHighlights();
@@ -374,15 +424,10 @@ final highlightsProvider = FutureProvider<List<dynamic>>((ref) async {
     apiHighlights = [...movieHighlights, ...seriesHighlights];
     if (apiHighlights.isNotEmpty) {
       apiHighlights.shuffle();
+      return apiHighlights;
     }
   } catch (e) {
     if (kDebugMode) print('Erro ao buscar destaques da API: $e');
-  }
-
-  // Combina as promoções (na frente) com os destaques da API
-  final combined = [...activePromos, ...apiHighlights];
-  if (combined.isNotEmpty) {
-    return combined;
   }
 
   return firestoreService.getHighlights();

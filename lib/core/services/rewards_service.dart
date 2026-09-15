@@ -196,6 +196,8 @@ class RewardsService extends ChangeNotifier {
   RewardsState _state = const RewardsState();
   Timer? _countdownTimer;
   StreamSubscription<User?>? _authSubscription;
+  StreamSubscription<DocumentSnapshot>? _userDocSubscription;
+  bool _isCloudSynced = false;
 
   RewardsState get state => _state;
   int get balance => _state.balance;
@@ -204,6 +206,12 @@ class RewardsService extends ChangeNotifier {
   bool get canClaimDailyBonus => _state.canClaimDailyBonus;
   int get currentStreakDay => _state.currentEligibleStreakDay;
   bool get hasSeenTutorial => _state.hasSeenTutorial;
+
+  int _parseInt(dynamic val, int defaultVal) {
+    if (val is num) return val.toInt();
+    if (val is String) return int.tryParse(val) ?? defaultVal;
+    return defaultVal;
+  }
 
   void init() {
     final rawBalance = _storage.getUserPref(_keyBalance);
@@ -242,11 +250,14 @@ class RewardsService extends ChangeNotifier {
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
         syncWithFirestore();
+      } else {
+        _isCloudSynced = false;
+        _userDocSubscription?.cancel();
       }
     });
   }
 
-  /// Sincroniza dados com a nuvem (Firestore)
+  /// Sincroniza dados com a nuvem (Firestore) garantindo que contas existentes recuperem o saldo
   Future<void> syncWithFirestore() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -258,15 +269,21 @@ class RewardsService extends ChangeNotifier {
       if (snapshot.exists) {
         final data = snapshot.data();
         if (data != null) {
-          final cloudPipocas = data['pipocas'] as int? ?? 0;
-          final cloudUntilMs = data['adFreeUntil'] as int? ?? 0;
-          final cloudTotal = data['pipocasTotalEarned'] as int? ?? 0;
+          final cloudPipocas = _parseInt(data['pipocas'], -1);
+          final cloudUntilMs = _parseInt(data['adFreeUntil'], 0);
+          final cloudTotal = _parseInt(data['pipocasTotalEarned'], 0);
           final cloudLastCheckin = data['pipocasLastCheckin'] as String?;
-          final cloudStreak = data['pipocasStreakDay'] as int? ?? 1;
+          final cloudStreak = _parseInt(data['pipocasStreakDay'], 1);
           final cloudHasSeenTut = data['hasSeenRewardsTutorial'] as bool? ?? false;
 
-          final mergedBalance = max(_state.balance, cloudPipocas);
-          final mergedTotal = max(_state.totalEarned, cloudTotal);
+          // Se existe na nuvem, o saldo da nuvem prevalece caso os dados locais tenham sido limpos
+          int resolvedBalance = _state.balance;
+          if (cloudPipocas >= 0) {
+            // Se o saldo local é o 10 padrão recém-criado, prevalece o cloudPipocas
+            resolvedBalance = max(_state.balance == 10 ? 0 : _state.balance, cloudPipocas);
+          }
+
+          final resolvedTotal = max(_state.totalEarned == 10 ? 0 : _state.totalEarned, cloudTotal);
 
           DateTime? mergedUntil = _state.adFreeUntil;
           if (cloudUntilMs > 0) {
@@ -277,8 +294,8 @@ class RewardsService extends ChangeNotifier {
           }
 
           _state = _state.copyWith(
-            balance: mergedBalance,
-            totalEarned: mergedTotal,
+            balance: resolvedBalance,
+            totalEarned: resolvedTotal,
             adFreeUntil: mergedUntil,
             lastCheckInDate: cloudLastCheckin ?? _state.lastCheckInDate,
             streakDay: (cloudStreak >= 1 && cloudStreak <= 7) ? cloudStreak : _state.streakDay,
@@ -286,10 +303,16 @@ class RewardsService extends ChangeNotifier {
             tick: _state.tick + 1,
           );
 
-          // Salva localmente
-          _storage.saveUserPref(_keyBalance, mergedBalance);
-          _storage.saveUserPref(_keyTotalEarned, mergedTotal);
+          _isCloudSynced = true;
+
+          // Salva localmente em cache
+          _storage.saveUserPref(_keyBalance, resolvedBalance);
+          _storage.saveUserPref(_keyTotalEarned, resolvedTotal);
           _storage.saveUserPref(_keyHasSeenTutorial, _state.hasSeenTutorial);
+          if (cloudLastCheckin != null) {
+            _storage.saveUserPref(_keyLastCheckIn, cloudLastCheckin);
+          }
+          _storage.saveUserPref(_keyStreakDay, _state.streakDay);
           if (mergedUntil != null) {
             _storage.saveUserPref(_keyAdFreeUntil, mergedUntil.millisecondsSinceEpoch);
           }
@@ -299,16 +322,78 @@ class RewardsService extends ChangeNotifier {
           notifyListeners();
         }
       } else {
+        _isCloudSynced = true;
         _saveToFirestore();
       }
+
+      // Escuta atualizações em tempo real no documento do usuário
+      _listenToCloudUpdates(user.uid);
     } catch (e) {
       if (kDebugMode) print('Erro ao sincronizar pipocas com Firestore: $e');
     }
   }
 
+  void _listenToCloudUpdates(String uid) {
+    _userDocSubscription?.cancel();
+    _userDocSubscription = FirebaseFirestore.instance.collection('users').doc(uid).snapshots().listen((snap) {
+      if (!snap.exists) return;
+      final data = snap.data();
+      if (data == null) return;
+
+      final cloudPipocas = _parseInt(data['pipocas'], -1);
+      final cloudUntilMs = _parseInt(data['adFreeUntil'], 0);
+      final cloudTotal = _parseInt(data['pipocasTotalEarned'], 0);
+      final cloudStreak = _parseInt(data['pipocasStreakDay'], 1);
+      final cloudHasSeenTut = data['hasSeenRewardsTutorial'] as bool? ?? false;
+      final cloudLastCheckin = data['pipocasLastCheckin'] as String?;
+
+      bool hasChanged = false;
+      int newBalance = _state.balance;
+      if (cloudPipocas >= 0 && cloudPipocas != _state.balance) {
+        newBalance = cloudPipocas;
+        hasChanged = true;
+      }
+
+      DateTime? newUntil = _state.adFreeUntil;
+      if (cloudUntilMs > 0) {
+        final untilDate = DateTime.fromMillisecondsSinceEpoch(cloudUntilMs);
+        if (_state.adFreeUntil == null || untilDate.millisecondsSinceEpoch != _state.adFreeUntil!.millisecondsSinceEpoch) {
+          newUntil = untilDate;
+          hasChanged = true;
+        }
+      }
+
+      if (cloudHasSeenTut != _state.hasSeenTutorial) {
+        hasChanged = true;
+      }
+
+      if (hasChanged) {
+        _state = _state.copyWith(
+          balance: newBalance,
+          totalEarned: max(_state.totalEarned, cloudTotal),
+          adFreeUntil: newUntil,
+          lastCheckInDate: cloudLastCheckin ?? _state.lastCheckInDate,
+          streakDay: (cloudStreak >= 1 && cloudStreak <= 7) ? cloudStreak : _state.streakDay,
+          hasSeenTutorial: cloudHasSeenTut || _state.hasSeenTutorial,
+          tick: _state.tick + 1,
+        );
+        _storage.saveUserPref(_keyBalance, newBalance);
+        _storage.saveUserPref(_keyTotalEarned, _state.totalEarned);
+        _storage.saveUserPref(_keyHasSeenTutorial, _state.hasSeenTutorial);
+        notifyListeners();
+      }
+    });
+  }
+
   void _saveToFirestore() {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+
+    // Proteção crucial: impede que o saldo temporário não sincronizado sobrescreva os dados reais da nuvem
+    if (!_isCloudSynced) {
+      syncWithFirestore();
+      return;
+    }
 
     FirebaseFirestore.instance.collection('users').doc(user.uid).set({
       'pipocas': _state.balance,
@@ -443,6 +528,7 @@ class RewardsService extends ChangeNotifier {
   void dispose() {
     _countdownTimer?.cancel();
     _authSubscription?.cancel();
+    _userDocSubscription?.cancel();
     super.dispose();
   }
 }
