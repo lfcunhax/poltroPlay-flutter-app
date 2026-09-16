@@ -35,6 +35,7 @@ class HomeScreen extends ConsumerWidget {
         color: const Color(0xFF00D4FF),
         backgroundColor: const Color(0xFF1A1A2E),
         onRefresh: () async {
+          ref.invalidate(highlightsProvider);
           ref.invalidate(trendingMoviesProvider);
           ref.invalidate(popularMoviesProvider);
           ref.invalidate(popularSeriesProvider);

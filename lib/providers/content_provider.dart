@@ -357,11 +357,29 @@ final highlightsProvider = FutureProvider<List<dynamic>>((ref) async {
   // 1. Busca promoções e destaques ativos do Firestore configurados no Painel de Controle
   List<Promotion> activePromos = [];
   try {
-    final promoSnap = await FirebaseFirestore.instance
-        .collection('promotions')
-        .where('isActive', isEqualTo: true)
-        .get();
+    QuerySnapshot promoSnap;
+    try {
+      // Tenta obter diretamente do servidor para refletir mudanças do painel na hora
+      promoSnap = await FirebaseFirestore.instance
+          .collection('promotions')
+          .where('isActive', isEqualTo: true)
+          .get(const GetOptions(source: Source.server));
+    } catch (_) {
+      // Fallback para cache local se estiver offline
+      promoSnap = await FirebaseFirestore.instance
+          .collection('promotions')
+          .where('isActive', isEqualTo: true)
+          .get(const GetOptions(source: Source.serverAndCache));
+    }
+
     final rawPromos = promoSnap.docs.map((doc) => Promotion.fromFirestore(doc)).toList();
+
+    // Ordena do mais recente para o mais antigo
+    rawPromos.sort((a, b) {
+      if (a.createdAt == null) return 1;
+      if (b.createdAt == null) return -1;
+      return b.createdAt!.compareTo(a.createdAt!);
+    });
 
     // Enriquece os itens de catálogo com sinopse e nota caso não tenham sido salvos diretamente no Firestore
     activePromos = await Future.wait(rawPromos.map((promo) async {

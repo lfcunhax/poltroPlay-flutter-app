@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart' as cache;
 import 'package:poltro_play/providers/auth_provider.dart';
+import 'package:poltro_play/providers/content_provider.dart';
 import 'package:poltro_play/providers/rewards_provider.dart';
 import 'package:poltro_play/providers/watch_progress_provider.dart';
 import 'package:poltro_play/widgets/rewards_modal.dart';
@@ -84,6 +85,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           await box.delete(k);
         }
       }
+
+      // 4. Invalida providers para forçar nova busca do servidor
+      ref.invalidate(highlightsProvider);
+      ref.invalidate(paginatedMoviesProvider);
+      ref.invalidate(paginatedSeriesProvider);
 
       await Future.delayed(const Duration(milliseconds: 600));
 
