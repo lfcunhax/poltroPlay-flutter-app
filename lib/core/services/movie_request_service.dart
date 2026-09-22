@@ -8,6 +8,16 @@ final movieRequestServiceProvider = Provider<MovieRequestService>((ref) {
   return MovieRequestService();
 });
 
+class RequestSubmissionResult {
+  final bool isSuccess;
+  final String? errorMessage;
+
+  const RequestSubmissionResult({required this.isSuccess, this.errorMessage});
+
+  factory RequestSubmissionResult.success() => const RequestSubmissionResult(isSuccess: true);
+  factory RequestSubmissionResult.failure(String message) => RequestSubmissionResult(isSuccess: false, errorMessage: message);
+}
+
 class MovieRequestService {
   final FirebaseFirestore _firestore;
 
@@ -15,7 +25,7 @@ class MovieRequestService {
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
   /// Registra o pedido no Firestore e dispara alerta via Resend se configurado no painel admin
-  Future<bool> submitRequest({
+  Future<RequestSubmissionResult> submitRequest({
     required String title,
     required String type, // 'movie' ou 'series'
     String? year,
@@ -25,7 +35,9 @@ class MovieRequestService {
     String? userEmail,
   }) async {
     final cleanTitle = title.trim();
-    if (cleanTitle.isEmpty) return false;
+    if (cleanTitle.isEmpty) {
+      return RequestSubmissionResult.failure('Por favor, informe o título do filme ou série.');
+    }
 
     try {
       // 1. Grava no Firestore na coleção 'movie_requests'
@@ -42,6 +54,23 @@ class MovieRequestService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      // Se usuário estiver logado, registra cópia em users/{uid}/movie_requests
+      if (userId != null && userId.isNotEmpty) {
+        _firestore
+            .collection('users')
+            .doc(userId)
+            .collection('movie_requests')
+            .doc(docRef.id)
+            .set({
+              'title': cleanTitle,
+              'type': type,
+              'year': year,
+              'status': 'pending',
+              'createdAt': FieldValue.serverTimestamp(),
+            })
+            .catchError((_) {});
+      }
+
       // 2. Dispara e-mail de alerta ao administrador via Resend em background
       _sendAdminAlertEmail(
         requestId: docRef.id,
@@ -56,10 +85,19 @@ class MovieRequestService {
         print('Erro ao enviar e-mail via Resend: $err');
       });
 
-      return true;
+      return RequestSubmissionResult.success();
     } catch (e) {
       print('Erro ao salvar pedido de filme: $e');
-      return false;
+      String msg = 'Erro ao enviar pedido.';
+      final str = e.toString();
+      if (str.contains('permission-denied')) {
+        msg = 'Permissão negada no Firestore (permission-denied).';
+      } else if (str.contains('network') || str.contains('unavailable')) {
+        msg = 'Falha de rede. Verifique sua internet e tente novamente.';
+      } else {
+        msg = str.replaceAll('Exception:', '').trim();
+      }
+      return RequestSubmissionResult.failure(msg);
     }
   }
 

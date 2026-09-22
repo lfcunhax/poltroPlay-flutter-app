@@ -76,7 +76,7 @@ class _MovieRequestModalState extends ConsumerState<MovieRequestModal> {
     final userEmail = user?.email ?? (_emailController.text.trim().isNotEmpty ? _emailController.text.trim() : null);
     final userName = user?.displayName ?? (userEmail != null ? userEmail.split('@').first : 'Visitante');
 
-    final success = await ref.read(movieRequestServiceProvider).submitRequest(
+    final result = await ref.read(movieRequestServiceProvider).submitRequest(
           title: _titleController.text,
           type: _selectedType,
           year: _yearController.text,
@@ -88,7 +88,7 @@ class _MovieRequestModalState extends ConsumerState<MovieRequestModal> {
 
     if (!mounted) return;
 
-    if (success) {
+    if (result.isSuccess) {
       HapticFeedback.heavyImpact();
       setState(() {
         _isSubmitting = false;
@@ -102,7 +102,7 @@ class _MovieRequestModalState extends ConsumerState<MovieRequestModal> {
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           content: Text(
-            'Não foi possível enviar o pedido. Tente novamente!',
+            result.errorMessage ?? 'Não foi possível enviar o pedido. Tente novamente!',
             style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600),
           ),
         ),
