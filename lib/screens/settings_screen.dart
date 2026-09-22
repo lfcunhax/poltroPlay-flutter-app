@@ -11,6 +11,7 @@ import 'package:poltro_play/providers/content_provider.dart';
 import 'package:poltro_play/providers/rewards_provider.dart';
 import 'package:poltro_play/providers/watch_progress_provider.dart';
 import 'package:poltro_play/widgets/rewards_modal.dart';
+import 'package:poltro_play/widgets/movie_request_modal.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -647,7 +648,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: 24),
 
-              // 5. Sobre o App
+              // 5. Pedidos & Sugestões
+              _buildSectionHeader('PEDIDOS & SUGESTÕES'),
+              const SizedBox(height: 12),
+              _buildSettingsCard(
+                children: [
+                  _buildSettingItem(
+                    icon: Icons.movie_filter_rounded,
+                    title: 'Pedir Filme ou Série',
+                    subtitle: 'Não achou seu título favorito? Peça aqui!',
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF7B2FF7), Color(0xFF00D4FF)],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        'NOVO',
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    onTap: () => showMovieRequestModal(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // 6. Sobre o App
               _buildSectionHeader('SOBRE'),
               const SizedBox(height: 12),
               _buildSettingsCard(
